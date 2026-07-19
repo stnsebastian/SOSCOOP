@@ -608,26 +608,29 @@ class AppController {
     if (audioNote && this.strobeAudioBox && this.strobeAudioPlayer) {
       this.strobeAudioBox.classList.remove('hidden');
       this.strobeAudioPlayer.src = audioNote;
+      this.strobeAudioPlayer.onplay = () => window.audioService.duckAlarm(true);
+      this.strobeAudioPlayer.onended = () => window.audioService.duckAlarm(false);
+      this.strobeAudioPlayer.onpause = () => window.audioService.duckAlarm(false);
       if (isReceiver) {
         const t1 = setTimeout(() => {
-          this.strobeAudioPlayer.play().catch(e => console.warn('Autoplay audio bloqueado:', e));
-        }, 600);
+          this.strobeAudioPlayer.play().catch(e => {
+            console.warn('Autoplay audio bloqueado, activando fallback HD:', e);
+            window.audioService.playAudioNote(audioNote);
+          });
+        }, 500);
         this.audioTimers.push(t1);
       }
     } else if (this.strobeAudioBox) {
       this.strobeAudioBox.classList.add('hidden');
-      if (this.strobeAudioPlayer) this.strobeAudioPlayer.src = '';
+      if (this.strobeAudioPlayer) {
+        this.strobeAudioPlayer.onplay = null;
+        this.strobeAudioPlayer.onended = null;
+        this.strobeAudioPlayer.onpause = null;
+        this.strobeAudioPlayer.src = '';
+      }
     }
 
     this.strobeModal.classList.remove('hidden');
-
-    // Si es receptor y no se pudo reproducir por autoplay del tag audio, reproducir por Web Audio Service
-    if (audioNote && isReceiver) {
-      const t2 = setTimeout(() => {
-        window.audioService.playAudioNote(audioNote);
-      }, 500);
-      this.audioTimers.push(t2);
-    }
   }
 
   renderAlertsFeed() {

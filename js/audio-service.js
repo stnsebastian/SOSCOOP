@@ -116,64 +116,78 @@ class AudioService {
 
     if (type === 'cooperacion') {
       // 🔴 COOPERACIÓN URGENTE (Apoyo Policial Inmediato / Máxima Prioridad)
-      // Modulación por LFO nativo tipo "Wail/Yelp" rápido (1.6 Hz, barrido entre 650Hz y 1450Hz)
+      // Modulación tipo "Yelp/Phaser Policial Rápido" (3.6 Hz, barrido entre 600Hz y 1550Hz con sobretono penetrante)
       const osc1 = this.audioCtx.createOscillator();
-      const osc2 = this.audioCtx.createOscillator(); // Sub-tono de cuerpo para celular
+      const osc2 = this.audioCtx.createOscillator(); // Sub-tono grave de cuerpo para celular
+      const osc3 = this.audioCtx.createOscillator(); // Sobretono de autoridad policial
       const lfo = this.audioCtx.createOscillator();
       const lfoGain = this.audioCtx.createGain();
 
       osc1.type = 'sine';
-      osc1.frequency.setValueAtTime(1050, this.audioCtx.currentTime);
+      osc1.frequency.setValueAtTime(1075, this.audioCtx.currentTime);
 
       osc2.type = 'triangle';
-      osc2.frequency.setValueAtTime(525, this.audioCtx.currentTime);
+      osc2.frequency.setValueAtTime(537.5, this.audioCtx.currentTime);
+
+      osc3.type = 'sine';
+      osc3.frequency.setValueAtTime(1612.5, this.audioCtx.currentTime);
 
       lfo.type = 'triangle';
-      lfo.frequency.setValueAtTime(1.6, this.audioCtx.currentTime); // 1.6 oscilaciones por segundo
-      lfoGain.gain.setValueAtTime(400, this.audioCtx.currentTime);  // ±400 Hz de variación de tono
+      lfo.frequency.setValueAtTime(3.6, this.audioCtx.currentTime); // 3.6 barridos rápidos por segundo (Yelp Policial)
+      lfoGain.gain.setValueAtTime(475, this.audioCtx.currentTime);  // ±475 Hz (Barrido de 600 Hz a 1550 Hz)
 
-      // Conectar LFO directamente al control de frecuencia de los osciladores
       lfo.connect(lfoGain);
       lfoGain.connect(osc1.frequency);
       
       const lfoGainSub = this.audioCtx.createGain();
-      lfoGainSub.gain.setValueAtTime(200, this.audioCtx.currentTime);
+      lfoGainSub.gain.setValueAtTime(237.5, this.audioCtx.currentTime);
       lfo.connect(lfoGainSub);
       lfoGainSub.connect(osc2.frequency);
 
+      const lfoGainTop = this.audioCtx.createGain();
+      lfoGainTop.gain.setValueAtTime(712.5, this.audioCtx.currentTime);
+      lfo.connect(lfoGainTop);
+      lfoGainTop.connect(osc3.frequency);
+
+      const topGainNode = this.audioCtx.createGain();
+      topGainNode.gain.setValueAtTime(0.35, this.audioCtx.currentTime);
+      osc3.connect(topGainNode);
+
       osc1.connect(masterGain);
       osc2.connect(masterGain);
+      topGainNode.connect(masterGain);
 
       osc1.start();
       osc2.start();
+      osc3.start();
       lfo.start();
 
-      this.activeOscillators.push(osc1, osc2, lfo);
-      this.activeGainNodes.push(lfoGain, lfoGainSub);
+      this.activeOscillators.push(osc1, osc2, osc3, lfo);
+      this.activeGainNodes.push(lfoGain, lfoGainSub, lfoGainTop, topGainNode);
 
     } else if (type === 'colaboracion') {
-      // 🟡 COLABORACIÓN (Apoyo Policial Controlado)
-      // Modulación por LFO nativo tipo "Hi-Lo Sweep" suave y distinguible (0.8 Hz, barrido 550Hz a 1300Hz)
+      // 🟡 COLABORACIÓN POLICIAL (Apoyo Policial Controlado / En Ruta)
+      // Modulación tipo "Wail Policial de Patrulla" (0.65 Hz, barrido majestuoso y profundo entre 500Hz y 1400Hz)
       const osc1 = this.audioCtx.createOscillator();
       const osc2 = this.audioCtx.createOscillator();
       const lfo = this.audioCtx.createOscillator();
       const lfoGain = this.audioCtx.createGain();
 
       osc1.type = 'sine';
-      osc1.frequency.setValueAtTime(925, this.audioCtx.currentTime);
+      osc1.frequency.setValueAtTime(950, this.audioCtx.currentTime);
 
       osc2.type = 'triangle';
-      osc2.frequency.setValueAtTime(462, this.audioCtx.currentTime);
+      osc2.frequency.setValueAtTime(475, this.audioCtx.currentTime);
 
       lfo.type = 'triangle';
-      lfo.frequency.setValueAtTime(0.8, this.audioCtx.currentTime); // Más pausado
-      lfoGain.gain.setValueAtTime(375, this.audioCtx.currentTime);
+      lfo.frequency.setValueAtTime(0.65, this.audioCtx.currentTime); // 0.65 Hz (Ciclo completo cada ~1.5 segundos, auténtico Wail)
+      lfoGain.gain.setValueAtTime(450, this.audioCtx.currentTime);   // ±450 Hz (Barrido de 500 Hz a 1400 Hz)
 
       lfo.connect(lfoGain);
       lfoGain.connect(osc1.frequency);
 
       const lfoGainSub = this.audioCtx.createGain();
-      lfoGainSub.gain.setValueAtTime(187, this.audioCtx.currentTime);
+      lfoGainSub.gain.setValueAtTime(225, this.audioCtx.currentTime);
       lfo.connect(lfoGainSub);
       lfoGainSub.connect(osc2.frequency);
 
@@ -234,22 +248,56 @@ class AudioService {
   }
 
   /**
-   * Inicia la grabación de micrófono (PTT)
+   * Atenúa o restaura el volumen del tono policial de fondo (Ducking) cuando se reproduce una nota de voz entrante.
+   * @param {boolean} shouldDuck true para bajar volumen de sirena, false para restaurar
+   */
+  duckAlarm(shouldDuck = true) {
+    if (!this.audioCtx || !this.isPlaying) return;
+    const now = this.audioCtx.currentTime;
+    const targetGain = shouldDuck ? 0.05 : 0.35; // 5% de volumen durante la voz, 35% al terminar
+    this.activeGainNodes.forEach((gain) => {
+      try {
+        if (gain.gain && typeof gain.gain.cancelScheduledValues === 'function') {
+          gain.gain.cancelScheduledValues(now);
+          gain.gain.linearRampToValueAtTime(targetGain, now + 0.15);
+        }
+      } catch (e) {}
+    });
+  }
+
+  /**
+   * Inicia la grabación de micrófono (PTT) con máxima calidad y nitidez de voz (HD Audio)
    * @returns {Promise<boolean>} éxito o fallo al solicitar permisos
    */
   async startRecording() {
     try {
       this.audioChunks = [];
-      this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const constraints = {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+          sampleRate: { ideal: 48000 },
+          sampleSize: { ideal: 16 }
+        }
+      };
+      this.mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
       
-      let mimeType = 'audio/webm';
+      let mimeType = 'audio/webm;codecs=opus';
       if (!MediaRecorder.isTypeSupported(mimeType)) {
-        if (MediaRecorder.isTypeSupported('audio/mp4')) mimeType = 'audio/mp4';
+        if (MediaRecorder.isTypeSupported('audio/webm')) mimeType = 'audio/webm';
+        else if (MediaRecorder.isTypeSupported('audio/mp4')) mimeType = 'audio/mp4';
         else if (MediaRecorder.isTypeSupported('audio/ogg')) mimeType = 'audio/ogg';
         else mimeType = '';
       }
 
-      this.mediaRecorder = mimeType ? new MediaRecorder(this.mediaStream, { mimeType }) : new MediaRecorder(this.mediaStream);
+      const options = {
+        audioBitsPerSecond: 128000 // 128 kbps para voz policial HD ultra nítida
+      };
+      if (mimeType) options.mimeType = mimeType;
+
+      this.mediaRecorder = new MediaRecorder(this.mediaStream, options);
       
       this.mediaRecorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) {
@@ -262,9 +310,20 @@ class AudioService {
       this.playTacticalClick();
       return true;
     } catch (error) {
-      console.warn('[AudioService] Error al obtener micrófono:', error);
-      alert('⚠️ No se pudo acceder al micrófono. Verifica los permisos del navegador en tu celular.');
-      return false;
+      console.warn('[AudioService] Error al obtener micrófono HD:', error);
+      try {
+        // Fallback robusto si el celular no soporta constraints avanzadas
+        this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        this.mediaRecorder = new MediaRecorder(this.mediaStream);
+        this.mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) this.audioChunks.push(e.data); };
+        this.recordingStartTime = Date.now();
+        this.mediaRecorder.start();
+        this.playTacticalClick();
+        return true;
+      } catch (e2) {
+        alert('⚠️ No se pudo acceder al micrófono. Verifica los permisos del navegador en tu celular.');
+        return false;
+      }
     }
   }
 
@@ -312,6 +371,9 @@ class AudioService {
     if (!audioUrl) return;
     try {
       const audio = new Audio(audioUrl);
+      audio.onplay = () => this.duckAlarm(true);
+      audio.onended = () => this.duckAlarm(false);
+      audio.onpause = () => this.duckAlarm(false);
       audio.play().catch(err => console.warn('No se pudo reproducir nota de voz:', err));
     } catch (e) {}
   }
