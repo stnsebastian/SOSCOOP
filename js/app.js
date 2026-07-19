@@ -130,62 +130,32 @@ class AppController {
     });
 
     // Cerrar sesión y botones tácticos de turno
-    this.btnLogout.addEventListener('click', () => this.logoutUser());
+    if (this.btnLogout) {
+      this.btnLogout.addEventListener('click', () => this.logoutUser());
+    }
     if (this.btnCloseShift) {
       this.btnCloseShift.addEventListener('click', () => this.logoutUser());
     }
 
-    // Modo Minimizar (Escucha en segundo plano y pantalla negra OLED)
+    // Modo Minimizar (Permitir ir a pantalla principal para usar otras aplicaciones sin cerrar el turno)
     if (this.btnMinimizeApp) {
       this.btnMinimizeApp.addEventListener('click', () => {
         window.audioService.playTacticalClick();
-        if (this.minimizeOverlay) {
-          this.minimizeOverlay.classList.remove('hidden');
+        
+        // Mostrar notificación o toast confirmando que la escucha sigue activa
+        if ('Notification' in window && Notification.permission === 'granted') {
+          try {
+            new Notification('🟢 SOSCOOP en segundo plano', {
+              body: 'Puedes usar otras aplicaciones con tranquilidad. Si entra una alerta de emergencia, la pantalla se encenderá y maximizará sola.',
+              icon: './assets/icons/icon-192.svg',
+              tag: 'soscoop-minimize-hint'
+            });
+          } catch (e) {}
+        } else {
+          alert('🟢 ESCUCHA POLICIAL ACTIVA EN SEGUNDO PLANO\n\nPuedes presionar el botón Inicio (Home) de tu teléfono y usar otras aplicaciones con normalidad.\n\nEn cuanto un compañero emita una emergencia, la baliza sonora y visual se maximizará automáticamente en tu pantalla.');
         }
-      });
-    }
 
-    if (this.minimizeOverlay) {
-      this.minimizeOverlay.addEventListener('dblclick', () => {
-        this.minimizeOverlay.classList.add('hidden');
-        window.audioService.playTacticalClick();
-      });
-    }
-    if (this.btnMinimizeRestore) {
-      this.btnMinimizeRestore.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (this.minimizeOverlay) this.minimizeOverlay.classList.add('hidden');
-        window.audioService.playTacticalClick();
-      });
-    }
-
-    // Botón Fijar / Candado en RAM
-    if (this.btnLockApp) {
-      this.btnLockApp.addEventListener('click', () => {
-        window.audioService.playTacticalClick();
-        if (this.lockModal) this.lockModal.classList.remove('hidden');
-
-        // Reforzar WakeLock y solicitar persistencia en almacenamiento al presionar candado
-        try {
-          if ('wakeLock' in navigator) {
-            navigator.wakeLock.request('screen').then(wl => {
-              this.screenWakeLock = wl;
-            }).catch(() => {});
-          }
-          if (navigator.storage && navigator.storage.persist) {
-            navigator.storage.persist().catch(() => {});
-          }
-          if ('Notification' in window && Notification.permission !== 'granted') {
-            Notification.requestPermission().catch(() => {});
-          }
-        } catch (e) {}
-      });
-    }
-
-    if (this.btnLockClose) {
-      this.btnLockClose.addEventListener('click', () => {
-        if (this.lockModal) this.lockModal.classList.add('hidden');
-        window.audioService.playTacticalClick();
+        try { window.blur(); } catch (e) {}
       });
     }
 
@@ -334,6 +304,21 @@ class AppController {
     this.operatorDisplayName.textContent = userObj.fullName;
     window.audioService.playTacticalClick();
     this.showView('dashboard');
+
+    // Reforzar automáticamente WakeLock, persistencia en RAM y notificaciones al entrar a turno
+    try {
+      if ('wakeLock' in navigator) {
+        navigator.wakeLock.request('screen').then(wl => {
+          this.screenWakeLock = wl;
+        }).catch(() => {});
+      }
+      if (navigator.storage && navigator.storage.persist) {
+        navigator.storage.persist().catch(() => {});
+      }
+      if ('Notification' in window && Notification.permission !== 'granted') {
+        Notification.requestPermission().catch(() => {});
+      }
+    } catch (e) {}
   }
 
   logoutUser() {

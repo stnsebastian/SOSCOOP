@@ -59,7 +59,8 @@ class AudioService {
   }
 
   /**
-   * Reproduce la alarma sonora de acuerdo al tipo de cooperación solicitada.
+   * Reproduce la alarma sonora de alta fidelidad de acuerdo al tipo de cooperación solicitada.
+   * Utiliza programación directa en el reloj de Web Audio API con rampas suaves (sin clics ni saltos digitales).
    * @param {'colaboracion'|'cooperacion'|'guardia'} type
    */
   playAlarm(type) {
@@ -69,95 +70,118 @@ class AudioService {
 
     this.isPlaying = true;
 
+    // Filtro pasa-bajos suave para eliminar asperezas digitales y sonar nítido en altavoces de celular
+    const filter = this.audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(3200, this.audioCtx.currentTime);
+    filter.connect(this.audioCtx.destination);
+
     if (type === 'cooperacion') {
       // 🔴 COOPERACIÓN (Apoyo Policial Urgente / Máxima Prioridad)
-      // Sirena tipo Wail/Yelp penetrante policial (oscilación continua entre 600Hz y 1400Hz)
-      const osc = this.audioCtx.createOscillator();
+      // Sirena policial "Wail/Yelp" de doble oscilador (Rampas continuas y fluidas entre 650Hz y 1450Hz)
+      const osc1 = this.audioCtx.createOscillator();
+      const osc2 = this.audioCtx.createOscillator(); // Sub-tono para mayor cuerpo en parlantes móviles
       const gain = this.audioCtx.createGain();
-      osc.type = 'sawtooth';
-      
-      gain.gain.setValueAtTime(0.3, this.audioCtx.currentTime);
-      osc.connect(gain);
-      gain.connect(this.audioCtx.destination);
-      osc.start();
 
-      this.activeOscillators.push(osc);
+      osc1.type = 'sawtooth';
+      osc2.type = 'triangle';
+
+      gain.gain.setValueAtTime(0.35, this.audioCtx.currentTime);
+
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(filter);
+
+      osc1.start();
+      osc2.start();
+
+      this.activeOscillators.push(osc1, osc2);
       this.activeGainNodes.push(gain);
 
-      let up = true;
-      let freq = 600;
-      this.alarmInterval = setInterval(() => {
-        if (!this.isPlaying) return;
-        if (up) {
-          freq += 80;
-          if (freq >= 1450) up = false;
-        } else {
-          freq -= 80;
-          if (freq <= 600) up = true;
-        }
-        if (osc && this.audioCtx) {
-          osc.frequency.setValueAtTime(freq, this.audioCtx.currentTime);
-        }
-      }, 35);
+      const cycleDuration = 0.6; // 600ms por ciclo
+      const scheduleCycle = () => {
+        if (!this.isPlaying || !this.audioCtx) return;
+        const now = this.audioCtx.currentTime;
+
+        // Programación suave sobre la línea de tiempo de audio (cero clics/distorsión)
+        osc1.frequency.setValueAtTime(650, now);
+        osc1.frequency.exponentialRampToValueAtTime(1450, now + cycleDuration * 0.5);
+        osc1.frequency.exponentialRampToValueAtTime(650, now + cycleDuration);
+
+        osc2.frequency.setValueAtTime(325, now);
+        osc2.frequency.exponentialRampToValueAtTime(725, now + cycleDuration * 0.5);
+        osc2.frequency.exponentialRampToValueAtTime(325, now + cycleDuration);
+      };
+
+      scheduleCycle();
+      this.alarmInterval = setInterval(scheduleCycle, cycleDuration * 1000 - 20);
 
     } else if (type === 'colaboracion') {
-      // 🟡 COLABORACIÓN (Situación Controlada / Apoyo Policial)
-      // Sirena policial tipo Sweep / Hi-Lo (Muy similar a la alarma roja pero en frecuencia 550Hz-1250Hz y ritmo 45ms)
-      const osc = this.audioCtx.createOscillator();
+      // 🟡 COLABORACIÓN (Apoyo Policial Controlado)
+      // Similar a la alarma roja (como solicitaste), pero con un barrido policial un poco más pausado (Hi-Lo Sweep)
+      const osc1 = this.audioCtx.createOscillator();
+      const osc2 = this.audioCtx.createOscillator();
       const gain = this.audioCtx.createGain();
-      osc.type = 'sawtooth';
-      
-      gain.gain.setValueAtTime(0.3, this.audioCtx.currentTime);
-      osc.connect(gain);
-      gain.connect(this.audioCtx.destination);
-      osc.start();
 
-      this.activeOscillators.push(osc);
+      osc1.type = 'sawtooth';
+      osc2.type = 'triangle';
+
+      gain.gain.setValueAtTime(0.35, this.audioCtx.currentTime);
+
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(filter);
+
+      osc1.start();
+      osc2.start();
+
+      this.activeOscillators.push(osc1, osc2);
       this.activeGainNodes.push(gain);
 
-      let up = true;
-      let freq = 550;
-      this.alarmInterval = setInterval(() => {
-        if (!this.isPlaying) return;
-        if (up) {
-          freq += 60;
-          if (freq >= 1250) up = false;
-        } else {
-          freq -= 60;
-          if (freq <= 550) up = true;
-        }
-        if (osc && this.audioCtx) {
-          osc.frequency.setValueAtTime(freq, this.audioCtx.currentTime);
-        }
-      }, 45);
+      const cycleDuration = 0.9; // 900ms por ciclo
+      const scheduleCycle = () => {
+        if (!this.isPlaying || !this.audioCtx) return;
+        const now = this.audioCtx.currentTime;
+
+        osc1.frequency.setValueAtTime(550, now);
+        osc1.frequency.exponentialRampToValueAtTime(1300, now + cycleDuration * 0.5);
+        osc1.frequency.exponentialRampToValueAtTime(550, now + cycleDuration);
+
+        osc2.frequency.setValueAtTime(275, now);
+        osc2.frequency.exponentialRampToValueAtTime(650, now + cycleDuration * 0.5);
+        osc2.frequency.exponentialRampToValueAtTime(275, now + cycleDuration);
+      };
+
+      scheduleCycle();
+      this.alarmInterval = setInterval(scheduleCycle, cycleDuration * 1000 - 20);
 
     } else if (type === 'guardia') {
       // 🔵 COOPERACIÓN SERVICIO DE GUARDIA (Apoyo en Dependencias)
-      // Alarma electrónica policial tipo Phaser / Interceptor electrónico (Modulación rápida en onda cuadrada de 900Hz-1650Hz cada 18ms)
+      // Tono policial bi-tono alternado cristalino (784Hz y 659Hz sin interrupciones ni ruido)
       const osc = this.audioCtx.createOscillator();
       const gain = this.audioCtx.createGain();
-      osc.type = 'square';
-      
-      gain.gain.setValueAtTime(0.25, this.audioCtx.currentTime);
+
+      osc.type = 'sine'; // Tono puro y claro
+      gain.gain.setValueAtTime(0.4, this.audioCtx.currentTime);
+
       osc.connect(gain);
-      gain.connect(this.audioCtx.destination);
+      gain.connect(filter);
       osc.start();
 
       this.activeOscillators.push(osc);
       this.activeGainNodes.push(gain);
 
-      let freq = 900;
-      let step = 110;
-      this.alarmInterval = setInterval(() => {
-        if (!this.isPlaying) return;
-        freq += step;
-        if (freq > 1650 || freq < 900) {
-          step = -step;
-        }
-        if (osc && this.audioCtx) {
-          osc.frequency.setValueAtTime(freq, this.audioCtx.currentTime);
-        }
-      }, 18);
+      const step = 0.3; // 300ms cada tono
+      const scheduleCycle = () => {
+        if (!this.isPlaying || !this.audioCtx) return;
+        const now = this.audioCtx.currentTime;
+
+        osc.frequency.setValueAtTime(784, now);        // G5 (Tono alto)
+        osc.frequency.setValueAtTime(659, now + step); // E5 (Tono bajo)
+      };
+
+      scheduleCycle();
+      this.alarmInterval = setInterval(scheduleCycle, step * 2000 - 20);
     }
   }
 
