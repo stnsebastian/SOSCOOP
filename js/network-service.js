@@ -1,29 +1,102 @@
 /**
  * NetworkService - SOSCOOP
- * Canal de comunicación táctica en tiempo real utilizando BroadcastChannel
- * para sincronizar alertas instantáneamente entre celulares/pestañas abiertas,
- * además de persistir el historial en localStorage.
+ * Canal de comunicación táctica en tiempo real utilizando WebSockets (MQTT sobre WSS)
+ * para sincronizar alertas instantáneamente por Internet/Wi-Fi/4G entre distintos celulares,
+ * y BroadcastChannel para pestañas locales en el mismo equipo.
  */
 
 class NetworkService {
   constructor() {
     this.channelName = 'soscoop_emergency_channel_v1';
+    this.cloudTopic = 'soscoop/bicrim_san_javier/emergency_alerts_v2';
+    
+    // Identificador único por dispositivo físico para evitar que el emisor reciba su propio eco de internet
+    this.deviceId = localStorage.getItem('soscoop_device_id');
+    if (!this.deviceId) {
+      this.deviceId = `CEL_${Date.now()}_${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
+      localStorage.setItem('soscoop_device_id', this.deviceId);
+    }
+
     this.channel = null;
+    this.mqttClient = null;
+    this.isCloudConnected = false;
     this.listeners = [];
-    this.initChannel();
+    this.statusListeners = [];
+
+    this.initLocalChannel();
+    this.initCloudClient();
   }
 
-  initChannel() {
+  initLocalChannel() {
     if ('BroadcastChannel' in window) {
       this.channel = new BroadcastChannel(this.channelName);
       this.channel.onmessage = (event) => {
         const alertData = event.data;
         if (alertData && alertData.id) {
-          console.log('[NetworkService] Alerta recibida vía BroadcastChannel:', alertData);
+          console.log('[NetworkService] Alerta recibida vía BroadcastChannel local:', alertData);
           this.saveToLocalHistory(alertData);
-          this.notifyListeners(alertData, false); // false = no fui yo quien la emitió
+          this.notifyListeners(alertData, false);
         }
       };
+    }
+  }
+
+  initCloudClient() {
+    if (typeof mqtt === 'undefined') {
+      console.warn('[NetworkService] Librería MQTT no cargada. Solo comunicación en el mismo dispositivo.');
+      return;
+    }
+
+    try {
+      // Conectar a broker público MQTT de alta disponibilidad por WebSocket Seguro (WSS)
+      console.log('[NetworkService] Conectando a servidor táctico en la nube (broker.emqx.io)...');
+      this.mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
+        clientId: `soscoop_${this.deviceId}`,
+        clean: true,
+        connectTimeout: 8000,
+        reconnectPeriod: 3000
+      });
+
+      this.mqttClient.on('connect', () => {
+        console.log('[NetworkService] 🟢 Conectado con éxito al canal cloud:', this.cloudTopic);
+        this.isCloudConnected = true;
+        this.notifyStatusListeners(true);
+
+        this.mqttClient.subscribe(this.cloudTopic, { qos: 1 }, (err) => {
+          if (!err) {
+            console.log('[NetworkService] Suscrito a alertas tácticas BICRIM SAN JAVIER');
+          }
+        });
+      });
+
+      this.mqttClient.on('message', (topic, message) => {
+        if (topic === this.cloudTopic) {
+          try {
+            const alertData = JSON.parse(message.toString());
+            // Si el mensaje fue enviado por este exacto celular, ignorar el eco remoto
+            if (alertData && alertData.senderDeviceId === this.deviceId) {
+              return;
+            }
+            console.log('[NetworkService] 🚨 ALERTA RECIBIDA POR INTERNET DESDE OTRO CELULAR:', alertData);
+            this.saveToLocalHistory(alertData);
+            this.notifyListeners(alertData, false);
+          } catch (e) {
+            console.error('[NetworkService] Error al procesar mensaje cloud:', e);
+          }
+        }
+      });
+
+      this.mqttClient.on('offline', () => {
+        console.warn('[NetworkService] 🟡 Conexión cloud desconectada temporalmente...');
+        this.isCloudConnected = false;
+        this.notifyStatusListeners(false);
+      });
+
+      this.mqttClient.on('error', (err) => {
+        console.warn('[NetworkService] Error en WebSocket cloud:', err);
+      });
+    } catch (e) {
+      console.error('[NetworkService] No se pudo iniciar cliente cloud:', e);
     }
   }
 
@@ -31,6 +104,19 @@ class NetworkService {
     if (typeof callback === 'function') {
       this.listeners.push(callback);
     }
+  }
+
+  onStatusChange(callback) {
+    if (typeof callback === 'function') {
+      this.statusListeners.push(callback);
+      callback(this.isCloudConnected);
+    }
+  }
+
+  notifyStatusListeners(isConnected) {
+    this.statusListeners.forEach(cb => {
+      try { cb(isConnected); } catch(e) {}
+    });
   }
 
   notifyListeners(alertData, isLocalBroadcast) {
@@ -44,30 +130,41 @@ class NetworkService {
   }
 
   /**
-   * Emite una nueva alerta táctica a toda la red SOSCOOP
+   * Emite una nueva alerta táctica a toda la red SOSCOOP (Cloud + Local)
    * @param {Object} alertObj 
    */
   broadcastAlert(alertObj) {
     const alertData = {
       ...alertObj,
       id: alertObj.id || `SOS_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      senderDeviceId: this.deviceId,
       timestamp: alertObj.timestamp || new Date().toISOString(),
       timeFormatted: alertObj.timeFormatted || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     };
 
-    // Guardar en historial local
+    // 1. Guardar en historial local
     this.saveToLocalHistory(alertData);
 
-    // Enviar a otros dispositivos / pestañas vía BroadcastChannel
+    // 2. Enviar por Internet / Wi-Fi / 4G a otros celulares del grupo (MQTT WebSocket)
+    if (this.mqttClient && this.isCloudConnected) {
+      try {
+        this.mqttClient.publish(this.cloudTopic, JSON.stringify(alertData), { qos: 1 });
+        console.log('[NetworkService] 📡 Alerta enviada por Internet a la red de celulares.');
+      } catch (e) {
+        console.warn('[NetworkService] Error al publicar en cloud:', e);
+      }
+    }
+
+    // 3. Enviar a otras pestañas o ventanas locales del mismo dispositivo
     if (this.channel) {
       try {
         this.channel.postMessage(alertData);
       } catch (e) {
-        console.warn('No se pudo postMessage al canal:', e);
+        console.warn('No se pudo postMessage al canal local:', e);
       }
     }
 
-    // Notificar localmente que se emitió con éxito
+    // 4. Notificar a la propia app local que se emitió con éxito
     this.notifyListeners(alertData, true);
     return alertData;
   }

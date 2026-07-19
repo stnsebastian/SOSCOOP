@@ -391,6 +391,21 @@ class AppController {
         this.navBadge.textContent = '1';
       }
     });
+
+    if (typeof window.networkService.onStatusChange === 'function') {
+      window.networkService.onStatusChange((isConnected) => {
+        const opLabel = document.querySelector('.operator-label');
+        if (opLabel) {
+          if (isConnected) {
+            opLabel.innerHTML = '🟢 RED POLICIAL ONLINE (WI-FI / 4G)';
+            opLabel.style.color = '#10b981';
+          } else {
+            opLabel.innerHTML = '🟡 MODO LOCAL / CONECTANDO A RED...';
+            opLabel.style.color = '#f59e0b';
+          }
+        }
+      });
+    }
   }
 
   /**
