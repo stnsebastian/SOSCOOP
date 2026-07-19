@@ -45,12 +45,17 @@ class AppController {
     this.btnCooperacion = document.getElementById('btn-sos-cooperacion');
     this.btnGuardia = document.getElementById('btn-sos-guardia');
 
-    // Grabador PTT
+    // Grabador PTT (opcional si quedara en dashboard y el nuevo de baliza)
     this.btnPTT = document.getElementById('btn-ptt');
     this.pttText = document.getElementById('ptt-text');
     this.audioPreviewContainer = document.getElementById('audio-preview-container');
     this.audioPlayerElem = document.getElementById('ptt-audio-player');
     this.btnDiscardAudio = document.getElementById('btn-discard-audio');
+
+    // Strobe PTT Grabador en vivo
+    this.btnStrobePTT = document.getElementById('btn-strobe-ptt');
+    this.strobeRecordingDot = document.getElementById('strobe-recording-dot');
+    this.strobePttText = document.getElementById('strobe-ptt-text');
 
     // Navegación inferior
     this.navButtons = document.querySelectorAll('.nav-item');
@@ -138,13 +143,21 @@ class AppController {
     this.btnGuardia.addEventListener('click', () => this.triggerEmergency('guardia'));
 
     // PTT Grabador (Soporte Touch y Click para móvil y escritorio)
-    this.btnPTT.addEventListener('click', () => this.togglePTT());
+    if (this.btnPTT) {
+      this.btnPTT.addEventListener('click', () => this.togglePTT());
+    }
+    if (this.btnDiscardAudio) {
+      this.btnDiscardAudio.addEventListener('click', () => {
+        this.currentAudioNote = null;
+        if (this.audioPreviewContainer) this.audioPreviewContainer.classList.add('hidden');
+        if (this.audioPlayerElem) this.audioPlayerElem.src = '';
+      });
+    }
 
-    this.btnDiscardAudio.addEventListener('click', () => {
-      this.currentAudioNote = null;
-      this.audioPreviewContainer.classList.add('hidden');
-      this.audioPlayerElem.src = '';
-    });
+    // PTT Grabador dentro del Modal de Alerta
+    if (this.btnStrobePTT) {
+      this.btnStrobePTT.addEventListener('click', () => this.toggleStrobePTT());
+    }
 
     // Navegación Inferior
     this.navButtons.forEach(btn => {
@@ -373,8 +386,59 @@ class AppController {
 
       if (audioResult) {
         this.currentAudioNote = audioResult;
-        this.audioPreviewContainer.classList.remove('hidden');
-        this.audioPlayerElem.src = audioResult.base64Url;
+        if (this.audioPreviewContainer) this.audioPreviewContainer.classList.remove('hidden');
+        if (this.audioPlayerElem) this.audioPlayerElem.src = audioResult.base64Url;
+      }
+    }
+  }
+
+  async toggleStrobePTT() {
+    if (!this.activeStrobeAlert && !this.lastAlertSentOrReceived) {
+      alert('No hay una alerta activa para adjuntar nota de voz.');
+      return;
+    }
+    if (!this.isRecordingStrobePTT) {
+      // Al empezar a grabar en sala o baliza, bajar o mutear sirena local para evitar acople en micrófono
+      window.audioService.duckAlarm(true);
+      const started = await window.audioService.startRecording();
+      if (started) {
+        this.isRecordingStrobePTT = true;
+        if (this.btnStrobePTT) this.btnStrobePTT.classList.add('recording');
+        if (this.strobeRecordingDot) this.strobeRecordingDot.classList.remove('hidden');
+        if (this.strobePttText) this.strobePttText.textContent = '🔴 GRABANDO... TOCA PARA TRANSMITIR A LA RED';
+      } else {
+        window.audioService.duckAlarm(false);
+      }
+    } else {
+      const audioResult = await window.audioService.stopRecording();
+      this.isRecordingStrobePTT = false;
+      if (this.btnStrobePTT) this.btnStrobePTT.classList.remove('recording');
+      if (this.strobeRecordingDot) this.strobeRecordingDot.classList.add('hidden');
+      if (this.strobePttText) this.strobePttText.textContent = '🎙️ GRABAR Y TRANSMITIR NOTA DE VOZ / RADIO PTT';
+      window.audioService.duckAlarm(false);
+
+      if (audioResult && audioResult.base64Url) {
+        const baseAlert = this.activeStrobeAlert || this.lastAlertSentOrReceived || {};
+        const voiceUpdatePayload = {
+          ...baseAlert,
+          id: `SOS_VOICE_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+          parentAlertId: baseAlert.id || `parent_${Date.now()}`,
+          alertType: baseAlert.alertType || 'colaboracion',
+          operatorName: `${this.currentUser ? this.currentUser.fullName : 'Funcionario'} (Radio PTT)`,
+          location: baseAlert.location || null,
+          audioNote: audioResult.base64Url,
+          audioDuration: audioResult.durationSec,
+          timestamp: new Date().toISOString()
+        };
+
+        // Emitir nota de voz en tiempo real por red (MQTT + BroadcastChannel)
+        window.networkService.broadcastAlert(voiceUpdatePayload);
+
+        // Mostrar reproductor en nuestra propia baliza de forma inmediata
+        if (this.strobeAudioBox && this.strobeAudioPlayer) {
+          this.strobeAudioBox.classList.remove('hidden');
+          this.strobeAudioPlayer.src = audioResult.base64Url;
+        }
       }
     }
   }
@@ -532,8 +596,23 @@ class AppController {
     if (!alertData) return;
     // Si el usuario ya silenció explícitamente esta alerta, no volver a dispararla por eco de red o service worker
     if (this.stoppedAlertId && alertData.id === this.stoppedAlertId) return;
-    // Si la baliza de esta misma alerta ya está activa en pantalla, no volver a superponer osciladores ni reiniciar audio
-    if (this.activeStrobeAlert && this.activeStrobeAlert.id === alertData.id && !this.strobeModal.classList.contains('hidden')) return;
+
+    // Si la baliza de esta misma alerta ya está activa en pantalla, verificar si es una actualización de nota de voz entrante
+    if (this.activeStrobeAlert && !this.strobeModal.classList.contains('hidden')) {
+      if (alertData.id === this.activeStrobeAlert.id || alertData.parentAlertId === this.activeStrobeAlert.id) {
+        if (alertData.audioNote && this.strobeAudioBox && this.strobeAudioPlayer) {
+          this.strobeAudioBox.classList.remove('hidden');
+          this.strobeAudioPlayer.src = alertData.audioNote;
+          if (isReceiver) {
+            this.strobeAudioPlayer.play().catch(e => {
+              console.warn('Autoplay audio bloqueado en update:', e);
+              window.audioService.playAudioNote(alertData.audioNote);
+            });
+          }
+        }
+        return;
+      }
+    }
 
     // 1. Si el usuario tenía activo el modo minimizado OLED (pantalla negra) o el modal candado, cerrarlos automáticamente para dar paso a la baliza de emergencia
     if (this.minimizeOverlay && !this.minimizeOverlay.classList.contains('hidden')) {
@@ -578,15 +657,18 @@ class AppController {
 
     this.strobeCallerName.textContent = `Operador: ${operatorName || 'Funcionario Policial'}`;
     
-    // Configurar ubicación GPS y botón para abrir mapa directamente
+    // Configurar ubicación GPS y botón para abrir mapa directamente (SOLO para receptores de la alerta)
     if (location && location.isGuardia) {
       this.strobeLocationText.innerHTML = `<strong>📍 SERVICIO DE GUARDIA DE LA UNIDAD</strong>`;
       if (this.btnStrobeOpenMap) this.btnStrobeOpenMap.classList.add('hidden');
     } else if (location && location.lat) {
       this.strobeLocationText.innerHTML = `📍 Coordenadas GPS: ${location.lat.toFixed(5)}, ${location.lng.toFixed(5)} <br><span style="font-size:11px;opacity:0.8;">Precisión ±${location.accuracy}m</span>`;
-      if (this.btnStrobeOpenMap && location.mapUrl) {
+      if (this.btnStrobeOpenMap && location.mapUrl && isReceiver) {
         this.btnStrobeOpenMap.classList.remove('hidden');
         this.btnStrobeOpenMap.onclick = () => window.open(location.mapUrl, '_blank');
+      } else if (this.btnStrobeOpenMap) {
+        // Ocultar si somos quien emite la alerta (isReceiver === false)
+        this.btnStrobeOpenMap.classList.add('hidden');
       }
     } else {
       this.strobeLocationText.textContent = `📍 Coordenadas en proceso...`;

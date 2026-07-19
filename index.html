@@ -168,26 +168,6 @@
           </div>
 
         </div>
-
-        <!-- PTT Audio Recorder Box -->
-        <div class="section-header" style="margin-top: 6px;">
-          <span>🎙️ ADJUNTAR NOTA DE VOZ (OPCIONAL)</span>
-        </div>
-        <div class="audio-recorder-box">
-          <div class="audio-controls">
-            <button id="btn-ptt" class="btn-ptt" type="button">
-              <span class="recording-dot hidden"></span>
-              <span id="ptt-text">🎙️ Grabar Nota de Voz / Radio PTT</span>
-            </button>
-          </div>
-
-          <!-- Preview & Discard -->
-          <div id="audio-preview-container" class="audio-preview hidden">
-            <span style="font-size: 13px; font-weight:700; color:var(--accent-cyan);">Audio listo para enviar:</span>
-            <audio id="ptt-audio-player" controls style="height:32px; max-width:210px;"></audio>
-            <button id="btn-discard-audio" class="btn-discard-audio" title="Descartar audio">🗑️</button>
-          </div>
-        </div>
       </section>
 
       <!-- 3. FEED / CENTRAL DE ALERTAS SCREEN -->
@@ -246,6 +226,12 @@
           <span style="font-size:12px; font-weight:800; color:#fff; letter-spacing:0.5px;">🎙️ NOTA DE VOZ DE EMERGENCIA:</span>
           <audio id="strobe-audio-player" controls style="width:100%; height:36px; margin-top:4px;"></audio>
         </div>
+
+        <!-- BOTÓN PTT DE RADIO EN VIVO DENTRO DEL MODAL DE ALERTA -->
+        <button id="btn-strobe-ptt" class="btn-ptt" type="button" style="width:100%; padding:14px; font-size:14px; font-weight:800; margin-top:8px; border-radius:12px; display:flex; align-items:center; justify-content:center; gap:8px;">
+          <span id="strobe-recording-dot" class="recording-dot hidden"></span>
+          <span id="strobe-ptt-text">🎙️ GRABAR Y TRANSMITIR NOTA DE VOZ / RADIO PTT</span>
+        </button>
 
         <button id="btn-strobe-open-map" class="btn-strobe-map hidden" type="button">
           🗺️ ABRIR UBICACIÓN GPS EN MAPA
