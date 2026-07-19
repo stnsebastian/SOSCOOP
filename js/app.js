@@ -196,6 +196,11 @@ class AppController {
 
     // Detener alarma desde el Modal Estroboscópico
     this.btnStopAlarm.addEventListener('click', () => {
+      if (this.activeStrobeAlert && this.activeStrobeAlert.id) {
+        this.stoppedAlertId = this.activeStrobeAlert.id;
+      } else if (this.lastAlertSentOrReceived && this.lastAlertSentOrReceived.id) {
+        this.stoppedAlertId = this.lastAlertSentOrReceived.id;
+      }
       if (this.audioTimers && this.audioTimers.length > 0) {
         this.audioTimers.forEach(t => clearTimeout(t));
         this.audioTimers = [];
@@ -445,6 +450,9 @@ class AppController {
           if (this.lockModal) this.lockModal.classList.add('hidden');
           const alertToShow = event.data.alertData || this.lastAlertSentOrReceived;
           if (alertToShow) {
+            // No reactivar si el usuario ya presionó detener en esta misma alerta o si el modal ya está visible
+            if (this.stoppedAlertId && alertToShow.id === this.stoppedAlertId) return;
+            if (this.activeStrobeAlert && this.activeStrobeAlert.id === alertToShow.id && !this.strobeModal.classList.contains('hidden')) return;
             this.openStrobeModal(alertToShow, true);
           }
           try { window.focus(); } catch (e) {}
@@ -521,6 +529,12 @@ class AppController {
    * @param {boolean} isReceiver true si la recibimos de otro celular (suena sirena), false si la emitimos nosotros (solo iluminación)
    */
   openStrobeModal(alertData, isReceiver = true) {
+    if (!alertData) return;
+    // Si el usuario ya silenció explícitamente esta alerta, no volver a dispararla por eco de red o service worker
+    if (this.stoppedAlertId && alertData.id === this.stoppedAlertId) return;
+    // Si la baliza de esta misma alerta ya está activa en pantalla, no volver a superponer osciladores ni reiniciar audio
+    if (this.activeStrobeAlert && this.activeStrobeAlert.id === alertData.id && !this.strobeModal.classList.contains('hidden')) return;
+
     // 1. Si el usuario tenía activo el modo minimizado OLED (pantalla negra) o el modal candado, cerrarlos automáticamente para dar paso a la baliza de emergencia
     if (this.minimizeOverlay && !this.minimizeOverlay.classList.contains('hidden')) {
       this.minimizeOverlay.classList.add('hidden');

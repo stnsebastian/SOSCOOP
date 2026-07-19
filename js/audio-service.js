@@ -38,8 +38,7 @@ class AudioService {
   /**
    * Detiene inmediatamente cualquier baliza o sirena en curso.
    */
-  stopAlarm() {
-    this.isPlaying = false;
+  _clearActiveNodes() {
     if (this.alarmInterval) {
       clearInterval(this.alarmInterval);
       this.alarmInterval = null;
@@ -71,6 +70,11 @@ class AudioService {
       } catch (e) {}
     });
     this.activeOscillators = [];
+  }
+
+  stopAlarm() {
+    this.isPlaying = false;
+    this._clearActiveNodes();
 
     // Pausar elementos HTML5 por si hubieran audios o notas en curso
     try {
@@ -92,7 +96,7 @@ class AudioService {
    * @param {'colaboracion'|'cooperacion'|'guardia'} type
    */
   playAlarm(type) {
-    this.stopAlarm();
+    this._clearActiveNodes();
     this.initContext();
     if (!this.audioCtx) return;
 

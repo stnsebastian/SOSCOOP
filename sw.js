@@ -1,4 +1,4 @@
-const CACHE_NAME = 'soscoop-v10';
+const CACHE_NAME = 'soscoop-v11';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -15,7 +15,7 @@ const ASSETS_TO_CACHE = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[Service Worker] Precargando assets PWA v10');
+      console.log('[Service Worker] Precargando assets PWA v11');
       return cache.addAll(ASSETS_TO_CACHE);
     }).then(() => self.skipWaiting())
   );
