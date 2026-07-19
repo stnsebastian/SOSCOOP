@@ -342,6 +342,50 @@ body {
   border-color: var(--red-border);
 }
 
+/* TACTICAL ACTIONS BAR */
+.tactical-actions-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 4px;
+  flex-shrink: 0;
+}
+
+.btn-tactical-action {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--glass-border);
+  color: white;
+  padding: clamp(6px, 1.2vh, 10px) 6px;
+  border-radius: var(--radius-sm);
+  font-size: clamp(9px, 1.3vh, 11px);
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  letter-spacing: 0.5px;
+}
+
+.btn-tactical-action.btn-min:hover {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: var(--blue-border);
+  color: var(--blue-glow);
+}
+
+.btn-tactical-action.btn-lock:hover {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: var(--yellow-border);
+  color: var(--yellow-glow);
+}
+
+.btn-tactical-action.btn-close:hover {
+  background: rgba(255, 26, 74, 0.2);
+  border-color: var(--red-border);
+  color: var(--red-glow);
+}
+
 /* EMERGENCY BUTTONS GRID */
 .section-header {
   font-size: clamp(9px, 1.4vh, 12px);
@@ -974,6 +1018,166 @@ body {
 
 .btn-stop-alarm:active {
   transform: scale(0.96);
+}
+
+/* MINIMIZE POCKET OLED OVERLAY */
+.minimize-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: #000000;
+  z-index: 2000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 30px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.minimize-overlay.hidden {
+  display: none !important;
+}
+
+.minimize-content {
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: center;
+}
+
+.minimize-badge {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid #10b981;
+  color: #10b981;
+  padding: 8px 16px;
+  border-radius: 50px;
+  font-size: 13px;
+  font-weight: 800;
+  animation: pulse-glow 2s infinite;
+}
+
+.minimize-desc {
+  font-size: 14px;
+  color: #e2e8f0;
+  line-height: 1.5;
+}
+
+.minimize-hints {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.btn-min-restore {
+  background: linear-gradient(135deg, #10b981, #059669);
+  border: none;
+  color: white;
+  padding: 14px 24px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 800;
+  margin-top: 10px;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+}
+
+/* LOCK CANDADO MODAL */
+.lock-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(20px);
+  z-index: 2000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+}
+
+.lock-modal.hidden {
+  display: none !important;
+}
+
+.lock-content-card {
+  background: var(--bg-card);
+  border: 2px solid var(--yellow-border);
+  border-radius: var(--radius-lg);
+  padding: 28px 22px;
+  max-width: 440px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: center;
+  text-align: center;
+  box-shadow: 0 0 50px rgba(245, 158, 11, 0.25);
+}
+
+.lock-icon-header {
+  font-size: 46px;
+}
+
+.lock-title {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--yellow-glow);
+  letter-spacing: 0.5px;
+}
+
+.lock-status-badge {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid #10b981;
+  color: #10b981;
+  padding: 6px 14px;
+  border-radius: 50px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.lock-instructions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+  width: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--glass-border);
+  font-size: 12px;
+  color: #cbd5e1;
+  line-height: 1.4;
+}
+
+.lock-step strong {
+  color: #f8fafc;
+  font-size: 13px;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.btn-lock-close {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  border: none;
+  color: #000;
+  padding: 14px 20px;
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  font-weight: 900;
+  cursor: pointer;
+  width: 100%;
+  box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
 }
 
 /* PWA INSTALL BANNER */

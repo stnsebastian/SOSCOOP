@@ -100,7 +100,20 @@
             <span class="operator-label">FUNCIONARIO POLICIAL / BICRIM SAN JAVIER</span>
             <span id="operator-display-name" class="operator-name">---</span>
           </div>
-          <button id="btn-logout" class="btn-logout" title="Cambiar Operador">Cambiar</button>
+          <button id="btn-logout" class="btn-logout" title="Finalizar Turno Operativo">🔴 CERRAR TURNO</button>
+        </div>
+
+        <!-- Tactical Action Bar (Minimizar / Candado / Cerrar Turno) -->
+        <div class="tactical-actions-bar">
+          <button id="btn-minimize-app" class="btn-tactical-action btn-min" type="button" title="Minimizar app al fondo / Modo Escucha">
+            <span>⏬ MINIMIZAR</span>
+          </button>
+          <button id="btn-lock-app" class="btn-tactical-action btn-lock" type="button" title="Fijar con Candado en memoria RAM">
+            <span>🔒 FIJAR / CANDADO</span>
+          </button>
+          <button id="btn-close-shift" class="btn-tactical-action btn-close" type="button" title="Salir y Cerrar Turno Operativo">
+            <span>🔴 CERRAR TURNO</span>
+          </button>
         </div>
 
         <!-- PWA INSTALL BANNER DASHBOARD -->
@@ -251,6 +264,51 @@
 
         <button id="btn-stop-alarm" class="btn-stop-alarm" type="button">
           🔕 DETENER ALARMA SONORA E ILUMINARIA
+        </button>
+      </div>
+    </div>
+
+    <!-- POCKET / MINIMIZE OLED BLACK OVERLAY -->
+    <div id="minimize-overlay" class="minimize-overlay hidden">
+      <div class="minimize-content">
+        <div class="minimize-badge">🟢 ESCUCHA POLICIAL ACTIVA</div>
+        <p class="minimize-desc">
+          Tu turno en <strong>BICRIM SAN JAVIER</strong> sigue activo en segundo plano y con pantalla protegida de bajo consumo.
+        </p>
+        <div class="minimize-hints">
+          <p>👉 <strong>Toca DOS VECES</strong> en cualquier parte de la pantalla para volver al panel operativo.</p>
+          <p style="margin-top:8px;">📱 O presiona el botón <strong>Inicio (Home)</strong> de tu celular para usar otras apps.</p>
+        </div>
+        <button id="btn-minimize-restore" class="btn-min-restore" type="button">
+          🔄 RESTAURAR PANEL SOSCOOP
+        </button>
+      </div>
+    </div>
+
+    <!-- LOCK / CANDADO INSTRUCTIONS MODAL -->
+    <div id="lock-modal" class="lock-modal hidden">
+      <div class="lock-content-card">
+        <div class="lock-icon-header">🔒</div>
+        <h3 class="lock-title">BLINDAR TURNO EN RAM</h3>
+        <div class="lock-status-badge">🟢 WAKELOCK Y PERSISTENCIA ACTIVADOS</div>
+        
+        <div class="lock-instructions">
+          <div class="lock-step">
+            <strong>📱 EN ANDROID (Samsung, Xiaomi, Motorola):</strong>
+            <p>1. Presiona el botón de <strong>Aplicaciones Recientes</strong> (rayitas o cuadrado en tu celular).</p>
+            <p>2. Mantén presionado el icono superior de <strong>SOSCOOP</strong>.</p>
+            <p>3. Toca en <strong>"Bloquear esta aplicación"</strong> o <strong>"Fijar" (Candado 🔒)</strong>. ¡Listo! La app nunca se cerrará ni desconectará.</p>
+          </div>
+          
+          <div class="lock-step">
+            <strong>🍎 EN iPHONE (iOS / Safari):</strong>
+            <p>• No deslices la tarjeta hacia arriba en el selector de apps recientes.</p>
+            <p>• Puedes bloquear la pantalla del celular sin problemas; la red mantendrá la escucha viva.</p>
+          </div>
+        </div>
+
+        <button id="btn-lock-close" class="btn-lock-close" type="button">
+          ✅ ENTENDIDO, BLINDAR TURNO
         </button>
       </div>
     </div>

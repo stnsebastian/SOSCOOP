@@ -65,9 +65,10 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // Si la PWA ya está abierta (en segundo plano o pestaña), la enfocamos de inmediato
+      // Si la PWA ya está abierta (en segundo plano o pestaña), la enfocamos de inmediato y le ordenamos desplegar baliza
       for (const client of clientList) {
-        if ('focus' in client) {
+        if ('focus' in client && 'postMessage' in client) {
+          client.postMessage({ type: 'ALERT_RESTORE_FOCUS' });
           return client.focus();
         }
       }
@@ -77,6 +78,53 @@ self.addEventListener('notificationclick', (event) => {
       }
     })
   );
+});
+
+// Manejo de recepción de mensajes desde app.js (cuando llega alerta por WebSocket estando minimizado)
+self.addEventListener('message', (event) => {
+  if (!event.data) return;
+
+  if (event.data.type === 'SHOW_EMERGENCY_NOTIFICATION') {
+    const alertData = event.data.alertData || {};
+    let typeTitle = '🟡 COLABORACIÓN POLICIAL';
+    if (alertData.alertType === 'cooperacion') typeTitle = '🔴 ¡COOPERACIÓN URGENTE!';
+    if (alertData.alertType === 'guardia') typeTitle = '🔵 COOPERACIÓN SERVICIO DE GUARDIA';
+
+    const options = {
+      body: `Operador: ${alertData.operatorName || 'Funcionario Policial'} - TOCA PARA DESPLEGAR BALIZA Y MAPA GPS`,
+      icon: './assets/icons/icon-192.svg',
+      badge: './assets/icons/icon-192.svg',
+      vibrate: [600, 200, 600, 200, 600, 200, 600, 200, 600],
+      requireInteraction: true,
+      renotify: true,
+      tag: alertData.id || 'soscoop-emergency-live'
+    };
+
+    event.waitUntil(
+      self.registration.showNotification(`🚨 SOSCOOP: ${typeTitle}`, options).then(() => {
+        // Intentar enfocar activamente a todas las ventanas abiertas en segundo plano
+        return clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+          for (const client of clientList) {
+            if ('focus' in client) {
+              client.postMessage({ type: 'ALERT_RESTORE_FOCUS', alertData });
+              client.focus().catch(() => {});
+            }
+          }
+        });
+      })
+    );
+  } else if (event.data.type === 'WAKE_AND_FOCUS_CLIENTS') {
+    event.waitUntil(
+      clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+        for (const client of clientList) {
+          if ('focus' in client) {
+            client.postMessage({ type: 'ALERT_RESTORE_FOCUS', alertData: event.data.alertData });
+            client.focus().catch(() => {});
+          }
+        }
+      })
+    );
+  }
 });
 
 // Manejo de recepción de Push remoto (cuando el servidor emite alerta)
@@ -96,11 +144,23 @@ self.addEventListener('push', (event) => {
     body: data.body,
     icon: './assets/icons/icon-192.svg',
     badge: './assets/icons/icon-192.svg',
-    vibrate: [500, 200, 500, 200, 500, 200, 500],
+    vibrate: [600, 200, 600, 200, 600, 200, 600],
     requireInteraction: true,
+    renotify: true,
     tag: 'soscoop-emergency'
   };
 
-  event.waitUntil(self.registration.showNotification(data.title, options));
+  event.waitUntil(
+    self.registration.showNotification(data.title, options).then(() => {
+      return clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+        for (const client of clientList) {
+          if ('focus' in client) {
+            client.postMessage({ type: 'ALERT_RESTORE_FOCUS' });
+            client.focus().catch(() => {});
+          }
+        }
+      });
+    })
+  );
 });
 

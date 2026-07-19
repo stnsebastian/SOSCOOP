@@ -82,6 +82,15 @@ class AppController {
     this.pwaInstallBannerDashboard = document.getElementById('pwa-install-banner-dashboard');
     this.btnInstallLogin = document.getElementById('btn-install-pwa-login');
     this.btnInstallDashboard = document.getElementById('btn-install-pwa-dashboard');
+
+    // Botones tácticos de turno y modales
+    this.btnMinimizeApp = document.getElementById('btn-minimize-app');
+    this.btnLockApp = document.getElementById('btn-lock-app');
+    this.btnCloseShift = document.getElementById('btn-close-shift');
+    this.minimizeOverlay = document.getElementById('minimize-overlay');
+    this.btnMinimizeRestore = document.getElementById('btn-minimize-restore');
+    this.lockModal = document.getElementById('lock-modal');
+    this.btnLockClose = document.getElementById('btn-lock-close');
   }
 
   bindEvents() {
@@ -120,8 +129,65 @@ class AppController {
       this.loginUser({ firstName: first, surnames: surnames, fullName: fullName });
     });
 
-    // Cerrar sesión
+    // Cerrar sesión y botones tácticos de turno
     this.btnLogout.addEventListener('click', () => this.logoutUser());
+    if (this.btnCloseShift) {
+      this.btnCloseShift.addEventListener('click', () => this.logoutUser());
+    }
+
+    // Modo Minimizar (Escucha en segundo plano y pantalla negra OLED)
+    if (this.btnMinimizeApp) {
+      this.btnMinimizeApp.addEventListener('click', () => {
+        window.audioService.playTacticalClick();
+        if (this.minimizeOverlay) {
+          this.minimizeOverlay.classList.remove('hidden');
+        }
+      });
+    }
+
+    if (this.minimizeOverlay) {
+      this.minimizeOverlay.addEventListener('dblclick', () => {
+        this.minimizeOverlay.classList.add('hidden');
+        window.audioService.playTacticalClick();
+      });
+    }
+    if (this.btnMinimizeRestore) {
+      this.btnMinimizeRestore.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this.minimizeOverlay) this.minimizeOverlay.classList.add('hidden');
+        window.audioService.playTacticalClick();
+      });
+    }
+
+    // Botón Fijar / Candado en RAM
+    if (this.btnLockApp) {
+      this.btnLockApp.addEventListener('click', () => {
+        window.audioService.playTacticalClick();
+        if (this.lockModal) this.lockModal.classList.remove('hidden');
+
+        // Reforzar WakeLock y solicitar persistencia en almacenamiento al presionar candado
+        try {
+          if ('wakeLock' in navigator) {
+            navigator.wakeLock.request('screen').then(wl => {
+              this.screenWakeLock = wl;
+            }).catch(() => {});
+          }
+          if (navigator.storage && navigator.storage.persist) {
+            navigator.storage.persist().catch(() => {});
+          }
+          if ('Notification' in window && Notification.permission !== 'granted') {
+            Notification.requestPermission().catch(() => {});
+          }
+        } catch (e) {}
+      });
+    }
+
+    if (this.btnLockClose) {
+      this.btnLockClose.addEventListener('click', () => {
+        if (this.lockModal) this.lockModal.classList.add('hidden');
+        window.audioService.playTacticalClick();
+      });
+    }
 
     // Botones de Emergencia (3 Tipos)
     this.btnColaboracion.addEventListener('click', () => this.triggerEmergency('colaboracion'));
@@ -271,10 +337,16 @@ class AppController {
   }
 
   logoutUser() {
-    if (confirm('¿Confirmas que deseas salir del turno operativo en SOSCOOP?')) {
+    if (confirm('¿Confirmas que deseas SALIR DEL TURNO OPERATIVO y cerrar la sesión de red en SOSCOOP?')) {
       localStorage.removeItem('soscoop_current_operator');
       this.currentUser = null;
       window.audioService.stopAlarm();
+      try {
+        if (this.screenWakeLock) {
+          this.screenWakeLock.release();
+          this.screenWakeLock = null;
+        }
+      } catch (e) {}
       this.showView('login');
     }
   }
@@ -402,29 +474,55 @@ class AppController {
       }
     } catch (e) {}
 
+    // Escuchar mensajes de restauración/despertar desde el Service Worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        if (!event.data) return;
+        if (event.data.type === 'ALERT_RESTORE_FOCUS') {
+          if (this.minimizeOverlay) this.minimizeOverlay.classList.add('hidden');
+          if (this.lockModal) this.lockModal.classList.add('hidden');
+          const alertToShow = event.data.alertData || this.lastAlertSentOrReceived;
+          if (alertToShow) {
+            this.openStrobeModal(alertToShow, true);
+          }
+          try { window.focus(); } catch (e) {}
+        }
+      });
+    }
+
     window.networkService.onAlertReceived((alertData, isLocalBroadcast) => {
-      // Activar la baliza y sirena siempre (o cuando entra de otra pestaña/celular remoto)
+      // Activar la baliza y sirena siempre que entra de otra pestaña/celular remoto
       if (!isLocalBroadcast) {
         this.openStrobeModal(alertData, true);
 
-        // Si la PWA está en segundo plano o el celular tiene pantalla apagada/minimizada, disparar Notificación Push local de alta prioridad
+        // Si la PWA está en segundo plano o el celular tiene pantalla minimizada al sistema operativo,
+        // disparar Notificación Push local de alta prioridad y ordenar al Service Worker traer al frente
         if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
-          let typeTitle = '🟡 COLABORACIÓN POLICIAL';
-          if (alertData.alertType === 'cooperacion') typeTitle = '🔴 ¡COOPERACIÓN URGENTE!';
-          if (alertData.alertType === 'guardia') typeTitle = '🔵 COOPERACIÓN SERVICIO DE GUARDIA';
-          
           try {
-            const n = new Notification(`🚨 SOSCOOP: ${typeTitle}`, {
-              body: `Operador: ${alertData.operatorName || 'Funcionario Policial'} - Toca para abrir baliza y ubicación en mapa.`,
-              icon: './assets/icons/icon-192x192.png',
-              badge: './assets/icons/icon-192x192.png',
-              requireInteraction: true,
-              tag: alertData.id || 'soscoop-alert'
-            });
-            n.onclick = () => {
-              window.focus();
-              n.close();
-            };
+            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+              navigator.serviceWorker.controller.postMessage({
+                type: 'SHOW_EMERGENCY_NOTIFICATION',
+                alertData: alertData
+              });
+            } else {
+              let typeTitle = '🟡 COLABORACIÓN POLICIAL';
+              if (alertData.alertType === 'cooperacion') typeTitle = '🔴 ¡COOPERACIÓN URGENTE!';
+              if (alertData.alertType === 'guardia') typeTitle = '🔵 COOPERACIÓN SERVICIO DE GUARDIA';
+              
+              const n = new Notification(`🚨 SOSCOOP: ${typeTitle}`, {
+                body: `Operador: ${alertData.operatorName || 'Funcionario Policial'} - Toca para abrir baliza y ubicación en mapa.`,
+                icon: './assets/icons/icon-192.svg',
+                badge: './assets/icons/icon-192.svg',
+                vibrate: [600, 200, 600, 200, 600, 200, 600, 200, 600],
+                requireInteraction: true,
+                renotify: true,
+                tag: alertData.id || 'soscoop-alert'
+              });
+              n.onclick = () => {
+                window.focus();
+                n.close();
+              };
+            }
           } catch (e) {
             console.warn('Notification error:', e);
           }
@@ -461,6 +559,25 @@ class AppController {
    * @param {boolean} isReceiver true si la recibimos de otro celular (suena sirena), false si la emitimos nosotros (solo iluminación)
    */
   openStrobeModal(alertData, isReceiver = true) {
+    // 1. Si el usuario tenía activo el modo minimizado OLED (pantalla negra) o el modal candado, cerrarlos automáticamente para dar paso a la baliza de emergencia
+    if (this.minimizeOverlay && !this.minimizeOverlay.classList.contains('hidden')) {
+      this.minimizeOverlay.classList.add('hidden');
+    }
+    if (this.lockModal && !this.lockModal.classList.contains('hidden')) {
+      this.lockModal.classList.add('hidden');
+    }
+
+    // 2. Intentar enfocar la ventana actual y notificar al Service Worker para despertar el navegador si está en segundo plano
+    try {
+      window.focus();
+      if (isReceiver && 'serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          type: 'WAKE_AND_FOCUS_CLIENTS',
+          alertData: alertData
+        });
+      }
+    } catch (e) {}
+
     this.activeStrobeAlert = alertData;
     const { alertType, operatorName, location, audioNote } = alertData;
 
