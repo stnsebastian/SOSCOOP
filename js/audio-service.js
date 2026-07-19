@@ -118,7 +118,7 @@ class AudioService {
       const lfo = this.audioCtx.createOscillator();
       const lfoGain = this.audioCtx.createGain();
 
-      osc1.type = 'sawtooth';
+      osc1.type = 'sine';
       osc1.frequency.setValueAtTime(1050, this.audioCtx.currentTime);
 
       osc2.type = 'triangle';
@@ -155,7 +155,7 @@ class AudioService {
       const lfo = this.audioCtx.createOscillator();
       const lfoGain = this.audioCtx.createGain();
 
-      osc1.type = 'sawtooth';
+      osc1.type = 'sine';
       osc1.frequency.setValueAtTime(925, this.audioCtx.currentTime);
 
       osc2.type = 'triangle';

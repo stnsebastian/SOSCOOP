@@ -1,4 +1,4 @@
-const CACHE_NAME = 'soscoop-v2';
+const CACHE_NAME = 'soscoop-v10';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -15,7 +15,7 @@ const ASSETS_TO_CACHE = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[Service Worker] Precargando assets PWA');
+      console.log('[Service Worker] Precargando assets PWA v10');
       return cache.addAll(ASSETS_TO_CACHE);
     }).then(() => self.skipWaiting())
   );
@@ -27,7 +27,7 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
           if (cacheName !== CACHE_NAME) {
-            console.log('[Service Worker] Limpiando caché antigua:', cacheName);
+            console.log('[Service Worker] Limpiando caché antigua para forzar actualización de código:', cacheName);
             return caches.delete(cacheName);
           }
         })
@@ -37,27 +37,26 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(event.request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-          return networkResponse;
+  const url = event.request.url;
+  // Estrategia Red-Primero para archivos de código y HTML para garantizar que el celular siempre tenga los últimos arreglos
+  if (url.endsWith('.js') || url.endsWith('.css') || url.endsWith('.html') || event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
         }
-        const responseToCache = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
-        });
         return networkResponse;
-      }).catch(() => {
-        if (event.request.mode === 'navigate') {
-          return caches.match('./index.html');
-        }
-      });
-    })
-  );
+      }).catch(() => caches.match(event.request))
+    );
+  } else {
+    // Cache-Primero solo para íconos e imágenes estáticas
+    event.respondWith(
+      caches.match(event.request).then((cachedResponse) => {
+        return cachedResponse || fetch(event.request);
+      })
+    );
+  }
 });
 
 // Manejo de eventos de clic en notificación push para traer la app al frente o abrirla

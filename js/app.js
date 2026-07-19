@@ -196,6 +196,10 @@ class AppController {
 
     // Detener alarma desde el Modal Estroboscópico
     this.btnStopAlarm.addEventListener('click', () => {
+      if (this.audioTimers && this.audioTimers.length > 0) {
+        this.audioTimers.forEach(t => clearTimeout(t));
+        this.audioTimers = [];
+      }
       window.audioService.stopAlarm();
       if (this.strobeAudioPlayer) {
         this.strobeAudioPlayer.pause();
@@ -580,14 +584,21 @@ class AppController {
       this.btnWhatsappResend.classList.remove('hidden');
     }
 
+    // Limpiar temporizadores previos
+    if (this.audioTimers && this.audioTimers.length > 0) {
+      this.audioTimers.forEach(t => clearTimeout(t));
+    }
+    this.audioTimers = [];
+
     // Configurar reproductor de nota de voz en la baliza si el mensaje adjunta audio
     if (audioNote && this.strobeAudioBox && this.strobeAudioPlayer) {
       this.strobeAudioBox.classList.remove('hidden');
       this.strobeAudioPlayer.src = audioNote;
       if (isReceiver) {
-        setTimeout(() => {
+        const t1 = setTimeout(() => {
           this.strobeAudioPlayer.play().catch(e => console.warn('Autoplay audio bloqueado:', e));
         }, 600);
+        this.audioTimers.push(t1);
       }
     } else if (this.strobeAudioBox) {
       this.strobeAudioBox.classList.add('hidden');
@@ -598,9 +609,10 @@ class AppController {
 
     // Si es receptor y no se pudo reproducir por autoplay del tag audio, reproducir por Web Audio Service
     if (audioNote && isReceiver) {
-      setTimeout(() => {
+      const t2 = setTimeout(() => {
         window.audioService.playAudioNote(audioNote);
       }, 500);
+      this.audioTimers.push(t2);
     }
   }
 
