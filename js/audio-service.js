@@ -46,21 +46,37 @@ class AudioService {
     }
     this.activeOscillators.forEach((osc) => {
       try {
-        osc.stop();
+        if (osc.frequency && osc.frequency.cancelScheduledValues) {
+          osc.frequency.cancelScheduledValues(0);
+        }
+        osc.stop(0);
         osc.disconnect();
       } catch (e) {}
     });
     this.activeOscillators = [];
 
     this.activeGainNodes.forEach((gain) => {
-      try { gain.disconnect(); } catch (e) {}
+      try {
+        if (gain.gain && gain.gain.cancelScheduledValues) {
+          gain.gain.cancelScheduledValues(0);
+        }
+        if (this.audioCtx) {
+          gain.gain.setValueAtTime(0, this.audioCtx.currentTime);
+        }
+        gain.disconnect();
+      } catch (e) {}
     });
     this.activeGainNodes = [];
+
+    try {
+      const allAudios = document.querySelectorAll('audio');
+      allAudios.forEach(a => { a.pause(); a.currentTime = 0; });
+    } catch(e) {}
   }
 
   /**
    * Reproduce la alarma sonora de alta fidelidad de acuerdo al tipo de cooperación solicitada.
-   * Utiliza programación directa en el reloj de Web Audio API con rampas suaves (sin clics ni saltos digitales).
+   * Utiliza programación limpia con cancelación de rampas previas para evitar distorsiones o crujidos.
    * @param {'colaboracion'|'cooperacion'|'guardia'} type
    */
   playAlarm(type) {
@@ -78,9 +94,9 @@ class AudioService {
 
     if (type === 'cooperacion') {
       // 🔴 COOPERACIÓN (Apoyo Policial Urgente / Máxima Prioridad)
-      // Sirena policial "Wail/Yelp" de doble oscilador (Rampas continuas y fluidas entre 650Hz y 1450Hz)
+      // Sirena policial "Wail/Yelp" de doble oscilador
       const osc1 = this.audioCtx.createOscillator();
-      const osc2 = this.audioCtx.createOscillator(); // Sub-tono para mayor cuerpo en parlantes móviles
+      const osc2 = this.audioCtx.createOscillator();
       const gain = this.audioCtx.createGain();
 
       osc1.type = 'sawtooth';
@@ -103,7 +119,10 @@ class AudioService {
         if (!this.isPlaying || !this.audioCtx) return;
         const now = this.audioCtx.currentTime;
 
-        // Programación suave sobre la línea de tiempo de audio (cero clics/distorsión)
+        // Cancelar cualquier valor previo para evitar solapamiento o distorsión
+        osc1.frequency.cancelScheduledValues(now);
+        osc2.frequency.cancelScheduledValues(now);
+
         osc1.frequency.setValueAtTime(650, now);
         osc1.frequency.exponentialRampToValueAtTime(1450, now + cycleDuration * 0.5);
         osc1.frequency.exponentialRampToValueAtTime(650, now + cycleDuration);
@@ -114,11 +133,11 @@ class AudioService {
       };
 
       scheduleCycle();
-      this.alarmInterval = setInterval(scheduleCycle, cycleDuration * 1000 - 20);
+      this.alarmInterval = setInterval(scheduleCycle, cycleDuration * 1000);
 
     } else if (type === 'colaboracion') {
       // 🟡 COLABORACIÓN (Apoyo Policial Controlado)
-      // Similar a la alarma roja (como solicitaste), pero con un barrido policial un poco más pausado (Hi-Lo Sweep)
+      // Sirena policial Hi-Lo Sweep
       const osc1 = this.audioCtx.createOscillator();
       const osc2 = this.audioCtx.createOscillator();
       const gain = this.audioCtx.createGain();
@@ -143,6 +162,9 @@ class AudioService {
         if (!this.isPlaying || !this.audioCtx) return;
         const now = this.audioCtx.currentTime;
 
+        osc1.frequency.cancelScheduledValues(now);
+        osc2.frequency.cancelScheduledValues(now);
+
         osc1.frequency.setValueAtTime(550, now);
         osc1.frequency.exponentialRampToValueAtTime(1300, now + cycleDuration * 0.5);
         osc1.frequency.exponentialRampToValueAtTime(550, now + cycleDuration);
@@ -153,15 +175,15 @@ class AudioService {
       };
 
       scheduleCycle();
-      this.alarmInterval = setInterval(scheduleCycle, cycleDuration * 1000 - 20);
+      this.alarmInterval = setInterval(scheduleCycle, cycleDuration * 1000);
 
     } else if (type === 'guardia') {
       // 🔵 COOPERACIÓN SERVICIO DE GUARDIA (Apoyo en Dependencias)
-      // Tono policial bi-tono alternado cristalino (784Hz y 659Hz sin interrupciones ni ruido)
+      // Tono policial bi-tono alternado cristalino
       const osc = this.audioCtx.createOscillator();
       const gain = this.audioCtx.createGain();
 
-      osc.type = 'sine'; // Tono puro y claro
+      osc.type = 'sine';
       gain.gain.setValueAtTime(0.4, this.audioCtx.currentTime);
 
       osc.connect(gain);
@@ -176,12 +198,13 @@ class AudioService {
         if (!this.isPlaying || !this.audioCtx) return;
         const now = this.audioCtx.currentTime;
 
+        osc.frequency.cancelScheduledValues(now);
         osc.frequency.setValueAtTime(784, now);        // G5 (Tono alto)
         osc.frequency.setValueAtTime(659, now + step); // E5 (Tono bajo)
       };
 
       scheduleCycle();
-      this.alarmInterval = setInterval(scheduleCycle, step * 2000 - 20);
+      this.alarmInterval = setInterval(scheduleCycle, step * 2000);
     }
   }
 
