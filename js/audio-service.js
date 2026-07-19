@@ -44,39 +44,51 @@ class AudioService {
       clearInterval(this.alarmInterval);
       this.alarmInterval = null;
     }
+
+    if (this.audioCtx) {
+      const now = this.audioCtx.currentTime;
+      this.activeGainNodes.forEach((gain) => {
+        try {
+          if (gain.gain && typeof gain.gain.cancelScheduledValues === 'function') {
+            gain.gain.cancelScheduledValues(now);
+          }
+          if (gain.gain) {
+            gain.gain.setValueAtTime(0, now);
+          }
+          gain.disconnect();
+        } catch (e) {}
+      });
+    }
+    this.activeGainNodes = [];
+
     this.activeOscillators.forEach((osc) => {
       try {
-        if (osc.frequency && osc.frequency.cancelScheduledValues) {
-          osc.frequency.cancelScheduledValues(0);
+        if (osc.frequency && typeof osc.frequency.cancelScheduledValues === 'function' && this.audioCtx) {
+          osc.frequency.cancelScheduledValues(this.audioCtx.currentTime);
         }
-        osc.stop(0);
+        osc.stop();
         osc.disconnect();
       } catch (e) {}
     });
     this.activeOscillators = [];
 
-    this.activeGainNodes.forEach((gain) => {
-      try {
-        if (gain.gain && gain.gain.cancelScheduledValues) {
-          gain.gain.cancelScheduledValues(0);
-        }
-        if (this.audioCtx) {
-          gain.gain.setValueAtTime(0, this.audioCtx.currentTime);
-        }
-        gain.disconnect();
-      } catch (e) {}
-    });
-    this.activeGainNodes = [];
-
+    // Pausar elementos HTML5 por si hubieran audios o notas en curso
     try {
       const allAudios = document.querySelectorAll('audio');
       allAudios.forEach(a => { a.pause(); a.currentTime = 0; });
     } catch(e) {}
+
+    if (this.audioCtx && this.audioCtx.state === 'running') {
+      try {
+        this.audioCtx.suspend();
+      } catch (e) {}
+    }
   }
 
   /**
-   * Reproduce la alarma sonora de alta fidelidad de acuerdo al tipo de cooperación solicitada.
-   * Utiliza programación limpia con cancelación de rampas previas para evitar distorsiones o crujidos.
+   * Reproduce la alarma sonora de alta fidelidad utilizando modulación continua nativa por LFO (Hardware C++ del navegador).
+   * Elimina completamente el uso de temporizadores JavaScript en bucle (setInterval), evitando 100% las distorsiones,
+   * saltos de frecuencia y permitiendo un corte inmediato y limpio al presionar detener.
    * @param {'colaboracion'|'cooperacion'|'guardia'} type
    */
   playAlarm(type) {
@@ -86,125 +98,114 @@ class AudioService {
 
     this.isPlaying = true;
 
-    // Filtro pasa-bajos suave para eliminar asperezas digitales y sonar nítido en altavoces de celular
+    // Filtro pasa-bajos suave para eliminar armónicos agudos y sonar nítido en altavoces de celular
     const filter = this.audioCtx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.setValueAtTime(3200, this.audioCtx.currentTime);
     filter.connect(this.audioCtx.destination);
 
+    // Nodo de ganancia maestro del ciclo
+    const masterGain = this.audioCtx.createGain();
+    masterGain.gain.setValueAtTime(0.35, this.audioCtx.currentTime);
+    masterGain.connect(filter);
+    this.activeGainNodes.push(masterGain);
+
     if (type === 'cooperacion') {
-      // 🔴 COOPERACIÓN (Apoyo Policial Urgente / Máxima Prioridad)
-      // Sirena policial "Wail/Yelp" de doble oscilador
+      // 🔴 COOPERACIÓN URGENTE (Apoyo Policial Inmediato / Máxima Prioridad)
+      // Modulación por LFO nativo tipo "Wail/Yelp" rápido (1.6 Hz, barrido entre 650Hz y 1450Hz)
       const osc1 = this.audioCtx.createOscillator();
-      const osc2 = this.audioCtx.createOscillator();
-      const gain = this.audioCtx.createGain();
+      const osc2 = this.audioCtx.createOscillator(); // Sub-tono de cuerpo para celular
+      const lfo = this.audioCtx.createOscillator();
+      const lfoGain = this.audioCtx.createGain();
 
       osc1.type = 'sawtooth';
+      osc1.frequency.setValueAtTime(1050, this.audioCtx.currentTime);
+
       osc2.type = 'triangle';
+      osc2.frequency.setValueAtTime(525, this.audioCtx.currentTime);
 
-      gain.gain.setValueAtTime(0.35, this.audioCtx.currentTime);
+      lfo.type = 'triangle';
+      lfo.frequency.setValueAtTime(1.6, this.audioCtx.currentTime); // 1.6 oscilaciones por segundo
+      lfoGain.gain.setValueAtTime(400, this.audioCtx.currentTime);  // ±400 Hz de variación de tono
 
-      osc1.connect(gain);
-      osc2.connect(gain);
-      gain.connect(filter);
+      // Conectar LFO directamente al control de frecuencia de los osciladores
+      lfo.connect(lfoGain);
+      lfoGain.connect(osc1.frequency);
+      
+      const lfoGainSub = this.audioCtx.createGain();
+      lfoGainSub.gain.setValueAtTime(200, this.audioCtx.currentTime);
+      lfo.connect(lfoGainSub);
+      lfoGainSub.connect(osc2.frequency);
+
+      osc1.connect(masterGain);
+      osc2.connect(masterGain);
 
       osc1.start();
       osc2.start();
+      lfo.start();
 
-      this.activeOscillators.push(osc1, osc2);
-      this.activeGainNodes.push(gain);
-
-      const cycleDuration = 0.6; // 600ms por ciclo
-      const scheduleCycle = () => {
-        if (!this.isPlaying || !this.audioCtx) return;
-        const now = this.audioCtx.currentTime;
-
-        // Cancelar cualquier valor previo para evitar solapamiento o distorsión
-        osc1.frequency.cancelScheduledValues(now);
-        osc2.frequency.cancelScheduledValues(now);
-
-        osc1.frequency.setValueAtTime(650, now);
-        osc1.frequency.exponentialRampToValueAtTime(1450, now + cycleDuration * 0.5);
-        osc1.frequency.exponentialRampToValueAtTime(650, now + cycleDuration);
-
-        osc2.frequency.setValueAtTime(325, now);
-        osc2.frequency.exponentialRampToValueAtTime(725, now + cycleDuration * 0.5);
-        osc2.frequency.exponentialRampToValueAtTime(325, now + cycleDuration);
-      };
-
-      scheduleCycle();
-      this.alarmInterval = setInterval(scheduleCycle, cycleDuration * 1000);
+      this.activeOscillators.push(osc1, osc2, lfo);
+      this.activeGainNodes.push(lfoGain, lfoGainSub);
 
     } else if (type === 'colaboracion') {
       // 🟡 COLABORACIÓN (Apoyo Policial Controlado)
-      // Sirena policial Hi-Lo Sweep
+      // Modulación por LFO nativo tipo "Hi-Lo Sweep" suave y distinguible (0.8 Hz, barrido 550Hz a 1300Hz)
       const osc1 = this.audioCtx.createOscillator();
       const osc2 = this.audioCtx.createOscillator();
-      const gain = this.audioCtx.createGain();
+      const lfo = this.audioCtx.createOscillator();
+      const lfoGain = this.audioCtx.createGain();
 
       osc1.type = 'sawtooth';
+      osc1.frequency.setValueAtTime(925, this.audioCtx.currentTime);
+
       osc2.type = 'triangle';
+      osc2.frequency.setValueAtTime(462, this.audioCtx.currentTime);
 
-      gain.gain.setValueAtTime(0.35, this.audioCtx.currentTime);
+      lfo.type = 'triangle';
+      lfo.frequency.setValueAtTime(0.8, this.audioCtx.currentTime); // Más pausado
+      lfoGain.gain.setValueAtTime(375, this.audioCtx.currentTime);
 
-      osc1.connect(gain);
-      osc2.connect(gain);
-      gain.connect(filter);
+      lfo.connect(lfoGain);
+      lfoGain.connect(osc1.frequency);
+
+      const lfoGainSub = this.audioCtx.createGain();
+      lfoGainSub.gain.setValueAtTime(187, this.audioCtx.currentTime);
+      lfo.connect(lfoGainSub);
+      lfoGainSub.connect(osc2.frequency);
+
+      osc1.connect(masterGain);
+      osc2.connect(masterGain);
 
       osc1.start();
       osc2.start();
+      lfo.start();
 
-      this.activeOscillators.push(osc1, osc2);
-      this.activeGainNodes.push(gain);
-
-      const cycleDuration = 0.9; // 900ms por ciclo
-      const scheduleCycle = () => {
-        if (!this.isPlaying || !this.audioCtx) return;
-        const now = this.audioCtx.currentTime;
-
-        osc1.frequency.cancelScheduledValues(now);
-        osc2.frequency.cancelScheduledValues(now);
-
-        osc1.frequency.setValueAtTime(550, now);
-        osc1.frequency.exponentialRampToValueAtTime(1300, now + cycleDuration * 0.5);
-        osc1.frequency.exponentialRampToValueAtTime(550, now + cycleDuration);
-
-        osc2.frequency.setValueAtTime(275, now);
-        osc2.frequency.exponentialRampToValueAtTime(650, now + cycleDuration * 0.5);
-        osc2.frequency.exponentialRampToValueAtTime(275, now + cycleDuration);
-      };
-
-      scheduleCycle();
-      this.alarmInterval = setInterval(scheduleCycle, cycleDuration * 1000);
+      this.activeOscillators.push(osc1, osc2, lfo);
+      this.activeGainNodes.push(lfoGain, lfoGainSub);
 
     } else if (type === 'guardia') {
-      // 🔵 COOPERACIÓN SERVICIO DE GUARDIA (Apoyo en Dependencias)
-      // Tono policial bi-tono alternado cristalino
+      // 🔵 COOPERACIÓN SERVICIO DE GUARDIA (Apoyo en Dependencia)
+      // Modulación por LFO de onda cuadrada tipo Despacho Europeo alternado (Hi-Lo alternado puro)
       const osc = this.audioCtx.createOscillator();
-      const gain = this.audioCtx.createGain();
+      const lfo = this.audioCtx.createOscillator();
+      const lfoGain = this.audioCtx.createGain();
 
       osc.type = 'sine';
-      gain.gain.setValueAtTime(0.4, this.audioCtx.currentTime);
+      osc.frequency.setValueAtTime(721.5, this.audioCtx.currentTime); // Centro entre 784Hz y 659Hz
 
-      osc.connect(gain);
-      gain.connect(filter);
+      lfo.type = 'square';
+      lfo.frequency.setValueAtTime(1.6, this.audioCtx.currentTime);   // Alternancia limpia cada ~312ms
+      lfoGain.gain.setValueAtTime(62.5, this.audioCtx.currentTime);   // +62.5 = 784Hz, -62.5 = 659Hz
+
+      lfo.connect(lfoGain);
+      lfoGain.connect(osc.frequency);
+
+      osc.connect(masterGain);
       osc.start();
+      lfo.start();
 
-      this.activeOscillators.push(osc);
-      this.activeGainNodes.push(gain);
-
-      const step = 0.3; // 300ms cada tono
-      const scheduleCycle = () => {
-        if (!this.isPlaying || !this.audioCtx) return;
-        const now = this.audioCtx.currentTime;
-
-        osc.frequency.cancelScheduledValues(now);
-        osc.frequency.setValueAtTime(784, now);        // G5 (Tono alto)
-        osc.frequency.setValueAtTime(659, now + step); // E5 (Tono bajo)
-      };
-
-      scheduleCycle();
-      this.alarmInterval = setInterval(scheduleCycle, step * 2000);
+      this.activeOscillators.push(osc, lfo);
+      this.activeGainNodes.push(lfoGain);
     }
   }
 

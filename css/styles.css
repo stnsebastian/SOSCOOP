@@ -368,13 +368,6 @@ body {
   letter-spacing: 0.5px;
 }
 
-.btn-tactical-action.btn-min:hover {
-  background: rgba(56, 189, 248, 0.2);
-  border-color: var(--blue-border);
-  color: var(--blue-glow);
-}
-
-
 .btn-tactical-action.btn-close:hover {
   background: rgba(255, 26, 74, 0.2);
   border-color: var(--red-border);

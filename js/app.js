@@ -83,14 +83,8 @@ class AppController {
     this.btnInstallLogin = document.getElementById('btn-install-pwa-login');
     this.btnInstallDashboard = document.getElementById('btn-install-pwa-dashboard');
 
-    // Botones tácticos de turno y modales
-    this.btnMinimizeApp = document.getElementById('btn-minimize-app');
-    this.btnLockApp = document.getElementById('btn-lock-app');
+    // Botones tácticos de turno
     this.btnCloseShift = document.getElementById('btn-close-shift');
-    this.minimizeOverlay = document.getElementById('minimize-overlay');
-    this.btnMinimizeRestore = document.getElementById('btn-minimize-restore');
-    this.lockModal = document.getElementById('lock-modal');
-    this.btnLockClose = document.getElementById('btn-lock-close');
   }
 
   bindEvents() {
@@ -137,27 +131,6 @@ class AppController {
       this.btnCloseShift.addEventListener('click', () => this.logoutUser());
     }
 
-    // Modo Minimizar (Permitir ir a pantalla principal para usar otras aplicaciones sin cerrar el turno)
-    if (this.btnMinimizeApp) {
-      this.btnMinimizeApp.addEventListener('click', () => {
-        window.audioService.playTacticalClick();
-        
-        // Mostrar notificación o toast confirmando que la escucha sigue activa
-        if ('Notification' in window && Notification.permission === 'granted') {
-          try {
-            new Notification('🟢 SOSCOOP en segundo plano', {
-              body: 'Puedes usar otras aplicaciones con tranquilidad. Si entra una alerta de emergencia, la pantalla se encenderá y maximizará sola.',
-              icon: './assets/icons/icon-192.svg',
-              tag: 'soscoop-minimize-hint'
-            });
-          } catch (e) {}
-        } else {
-          alert('🟢 ESCUCHA POLICIAL ACTIVA EN SEGUNDO PLANO\n\nPuedes presionar el botón Inicio (Home) de tu teléfono y usar otras aplicaciones con normalidad.\n\nEn cuanto un compañero emita una emergencia, la baliza sonora y visual se maximizará automáticamente en tu pantalla.');
-        }
-
-        try { window.blur(); } catch (e) {}
-      });
-    }
 
     // Botones de Emergencia (3 Tipos)
     this.btnColaboracion.addEventListener('click', () => this.triggerEmergency('colaboracion'));
