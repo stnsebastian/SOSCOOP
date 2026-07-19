@@ -11,6 +11,7 @@ class AppController {
     this.activeStrobeAlert = null;
     this.isWhatsAppEnabled = localStorage.getItem('soscoop_whatsapp_enabled') === 'true';
     this.lastAlertSentOrReceived = null;
+    this.deferredInstallPrompt = null;
   }
 
   init() {
@@ -19,6 +20,7 @@ class AppController {
     this.bindEvents();
     this.checkSession();
     this.setupNetworkListeners();
+    this.setupPWAInstaller();
     this.renderAlertsFeed();
   }
 
@@ -71,6 +73,12 @@ class AppController {
     this.loginWhatsappToggle = document.getElementById('login-whatsapp-toggle');
     this.dashboardWhatsappToggle = document.getElementById('dashboard-whatsapp-toggle');
     this.btnWhatsappResend = document.getElementById('btn-whatsapp-resend');
+
+    // PWA Instalador elementos
+    this.pwaInstallBannerLogin = document.getElementById('pwa-install-banner-login');
+    this.pwaInstallBannerDashboard = document.getElementById('pwa-install-banner-dashboard');
+    this.btnInstallLogin = document.getElementById('btn-install-pwa-login');
+    this.btnInstallDashboard = document.getElementById('btn-install-pwa-dashboard');
   }
 
   bindEvents() {
@@ -521,6 +529,74 @@ class AppController {
         </div>
       `;
     }).join('');
+  }
+
+  setupPWAInstaller() {
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone || document.referrer.includes('android-app://');
+    
+    if (isStandalone) {
+      console.log('[SOSCOOP] Ejecutando en modo nativo/standalone. Ocultando banners de instalación.');
+      return;
+    }
+
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+    // Escuchar el evento oficial que lanza Chrome / Android / Edge cuando la PWA está lista para instalar
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      this.deferredInstallPrompt = e;
+      console.log('[SOSCOOP] beforeinstallprompt capturado. PWA lista para instalar en celular.');
+
+      if (this.pwaInstallBannerLogin) this.pwaInstallBannerLogin.classList.remove('hidden');
+      if (this.pwaInstallBannerDashboard) this.pwaInstallBannerDashboard.classList.remove('hidden');
+    });
+
+    // En iOS o en casos donde no se dispara automáticamente pero están en navegador, mostrar con guía
+    if (isIOS) {
+      if (this.pwaInstallBannerLogin) this.pwaInstallBannerLogin.classList.remove('hidden');
+      if (this.pwaInstallBannerDashboard) this.pwaInstallBannerDashboard.classList.remove('hidden');
+
+      const setIOSHelpText = (btn) => {
+        if (!btn) return;
+        btn.innerHTML = `📲 En iPhone/iPad:<br><small style="font-size:10px; opacity:0.9;">Toca 'Compartir' ⎋ y luego 'Agregar a Inicio' ➕</small>`;
+        btn.style.background = 'linear-gradient(135deg, #1e293b, #334155)';
+      };
+      setIOSHelpText(this.btnInstallLogin);
+      setIOSHelpText(this.btnInstallDashboard);
+    } else {
+      setTimeout(() => {
+        if (!isStandalone && !this.deferredInstallPrompt && !isIOS) {
+          if (this.pwaInstallBannerLogin) this.pwaInstallBannerLogin.classList.remove('hidden');
+          if (this.pwaInstallBannerDashboard) this.pwaInstallBannerDashboard.classList.remove('hidden');
+        }
+      }, 1500);
+    }
+
+    const triggerInstall = async () => {
+      if (this.deferredInstallPrompt) {
+        this.deferredInstallPrompt.prompt();
+        const { outcome } = await this.deferredInstallPrompt.userChoice;
+        console.log(`[SOSCOOP] Resultado de instalación PWA: ${outcome}`);
+        if (outcome === 'accepted') {
+          if (this.pwaInstallBannerLogin) this.pwaInstallBannerLogin.classList.add('hidden');
+          if (this.pwaInstallBannerDashboard) this.pwaInstallBannerDashboard.classList.add('hidden');
+        }
+        this.deferredInstallPrompt = null;
+      } else if (isIOS) {
+        alert("Para instalar SOSCOOP en iPhone/iPad:\n\n1. Toca el icono 'Compartir' ⎋ en la barra inferior del navegador.\n2. Desliza y selecciona 'Agregar a inicio' ➕.");
+      } else {
+        alert("Para instalar SOSCOOP como aplicación en tu celular:\n\n1. Abre las opciones del navegador (menú de 3 puntos ⋮ en la esquina de Chrome).\n2. Toca 'Instalar aplicación' o 'Agregar a la pantalla principal'.");
+      }
+    };
+
+    if (this.btnInstallLogin) this.btnInstallLogin.addEventListener('click', triggerInstall);
+    if (this.btnInstallDashboard) this.btnInstallDashboard.addEventListener('click', triggerInstall);
+
+    window.addEventListener('appinstalled', () => {
+      console.log('[SOSCOOP] ¡Aplicación instalada exitosamente en el dispositivo!');
+      if (this.pwaInstallBannerLogin) this.pwaInstallBannerLogin.classList.add('hidden');
+      if (this.pwaInstallBannerDashboard) this.pwaInstallBannerDashboard.classList.add('hidden');
+    });
   }
 }
 
