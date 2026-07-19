@@ -248,41 +248,89 @@ class AudioService {
   }
 
   /**
-   * Atenúa o restaura el volumen del tono policial de fondo (Ducking) cuando se reproduce una nota de voz entrante.
-   * @param {boolean} shouldDuck true para bajar volumen de sirena, false para restaurar
+   * Atenúa o silencia el volumen del tono policial de fondo (Ducking) cuando se reproduce una nota de voz entrante.
+   * @param {boolean} shouldDuck true para bajar volumen de sirena al mínimo (0.5%), false para restaurar (35%)
    */
   duckAlarm(shouldDuck = true) {
     if (!this.audioCtx || !this.isPlaying) return;
     const now = this.audioCtx.currentTime;
-    const targetGain = shouldDuck ? 0.05 : 0.35; // 5% de volumen durante la voz, 35% al terminar
+    // 0.005 (0.5%) de volumen durante la voz para que el receptor escuche SOLO LA VOZ pura y nítida
+    const targetGain = shouldDuck ? 0.005 : 0.35;
     this.activeGainNodes.forEach((gain) => {
       try {
         if (gain.gain && typeof gain.gain.cancelScheduledValues === 'function') {
           gain.gain.cancelScheduledValues(now);
-          gain.gain.linearRampToValueAtTime(targetGain, now + 0.15);
+          gain.gain.linearRampToValueAtTime(targetGain, now + 0.1);
         }
       } catch (e) {}
     });
   }
 
   /**
-   * Inicia la grabación de micrófono (PTT) con máxima calidad y nitidez de voz (HD Audio)
+   * Inicia la grabación de micrófono (PTT) con máxima calidad, compresión de estudio y nitidez de voz (Studio HD Audio)
    * @returns {Promise<boolean>} éxito o fallo al solicitar permisos
    */
   async startRecording() {
     try {
       this.audioChunks = [];
+      // Pedimos audio crudo de alta fidelidad sin filtros VOIP que apagan los agudos en celulares
       const constraints = {
         audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
           channelCount: 1,
           sampleRate: { ideal: 48000 },
           sampleSize: { ideal: 16 }
         }
       };
-      this.mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+      const rawStream = await navigator.mediaDevices.getUserMedia(constraints);
+      this.rawMicStream = rawStream;
+
+      let recordStream = rawStream;
+      try {
+        this.initContext();
+        if (this.audioCtx && typeof this.audioCtx.createMediaStreamSource === 'function' && typeof this.audioCtx.createMediaStreamDestination === 'function') {
+          const source = this.audioCtx.createMediaStreamSource(rawStream);
+
+          // 1. Filtro Pasa-Altos (Highpass a 85 Hz) para eliminar retumbo de viento y golpes en el celular
+          const highPass = this.audioCtx.createBiquadFilter();
+          highPass.type = 'highpass';
+          highPass.frequency.value = 85;
+
+          // 2. Filtro de Nitidez y Presencia Vocal (+5 dB en 2600 Hz) para máxima inteligibilidad en radios policiales
+          const presenceFilter = this.audioCtx.createBiquadFilter();
+          presenceFilter.type = 'peaking';
+          presenceFilter.frequency.value = 2600;
+          presenceFilter.Q.value = 1.0;
+          presenceFilter.gain.value = 5.0;
+
+          // 3. Pre-amplificador de volumen (+3.5 dB / 1.5x) para que la voz suene fuerte y autoritaria
+          const preAmp = this.audioCtx.createGain();
+          preAmp.gain.value = 1.5;
+
+          // 4. Compresor Dinámico Studio-Grade (Empareja volumen del que habla despacio y evita distorsión si gritan)
+          const compressor = this.audioCtx.createDynamicsCompressor();
+          compressor.threshold.value = -22;
+          compressor.knee.value = 10;
+          compressor.ratio.value = 4.5;
+          compressor.attack.value = 0.003;
+          compressor.release.value = 0.25;
+
+          const destination = this.audioCtx.createMediaStreamDestination();
+
+          source.connect(highPass);
+          highPass.connect(presenceFilter);
+          presenceFilter.connect(preAmp);
+          preAmp.connect(compressor);
+          compressor.connect(destination);
+
+          recordStream = destination.stream;
+        }
+      } catch (dspError) {
+        console.warn('[AudioService] DSP no disponible en este dispositivo, grabando stream directo HD:', dspError);
+        recordStream = rawStream;
+      }
       
       let mimeType = 'audio/webm;codecs=opus';
       if (!MediaRecorder.isTypeSupported(mimeType)) {
@@ -297,7 +345,8 @@ class AudioService {
       };
       if (mimeType) options.mimeType = mimeType;
 
-      this.mediaRecorder = new MediaRecorder(this.mediaStream, options);
+      this.mediaStream = recordStream;
+      this.mediaRecorder = new MediaRecorder(recordStream, options);
       
       this.mediaRecorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) {
@@ -314,6 +363,7 @@ class AudioService {
       try {
         // Fallback robusto si el celular no soporta constraints avanzadas
         this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        this.rawMicStream = this.mediaStream;
         this.mediaRecorder = new MediaRecorder(this.mediaStream);
         this.mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) this.audioChunks.push(e.data); };
         this.recordingStartTime = Date.now();
@@ -342,9 +392,12 @@ class AudioService {
         const durationSec = Math.max(1, Math.round((Date.now() - (this.recordingStartTime || Date.now())) / 1000));
         const blob = new Blob(this.audioChunks, { type: this.mediaRecorder.mimeType || 'audio/webm' });
         
-        // Detener pistas de stream
+        // Detener pistas de stream procesado y stream crudo del micrófono
         if (this.mediaStream) {
           this.mediaStream.getTracks().forEach(track => track.stop());
+        }
+        if (this.rawMicStream) {
+          this.rawMicStream.getTracks().forEach(track => track.stop());
         }
 
         const reader = new FileReader();
@@ -364,7 +417,7 @@ class AudioService {
   }
 
   /**
-   * Reproduce un audio codificado en Base64 o URL
+   * Reproduce un audio codificado en Base64 o URL silenciando la sirena de fondo
    * @param {string} audioUrl
    */
   playAudioNote(audioUrl) {

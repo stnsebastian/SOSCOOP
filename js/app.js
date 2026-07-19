@@ -159,6 +159,18 @@ class AppController {
       this.btnStrobePTT.addEventListener('click', () => this.toggleStrobePTT());
     }
 
+    // Control automático del volumen de la sirena (ducking al 0.5%) cada vez que se reproduzca una nota de voz PTT en baliza o vista previa
+    if (this.strobeAudioPlayer) {
+      this.strobeAudioPlayer.addEventListener('play', () => window.audioService.duckAlarm(true));
+      this.strobeAudioPlayer.addEventListener('pause', () => window.audioService.duckAlarm(false));
+      this.strobeAudioPlayer.addEventListener('ended', () => window.audioService.duckAlarm(false));
+    }
+    if (this.audioPlayerElem) {
+      this.audioPlayerElem.addEventListener('play', () => window.audioService.duckAlarm(true));
+      this.audioPlayerElem.addEventListener('pause', () => window.audioService.duckAlarm(false));
+      this.audioPlayerElem.addEventListener('ended', () => window.audioService.duckAlarm(false));
+    }
+
     // Navegación Inferior
     this.navButtons.forEach(btn => {
       btn.addEventListener('click', () => {
@@ -603,6 +615,9 @@ class AppController {
         if (alertData.audioNote && this.strobeAudioBox && this.strobeAudioPlayer) {
           this.strobeAudioBox.classList.remove('hidden');
           this.strobeAudioPlayer.src = alertData.audioNote;
+          this.strobeAudioPlayer.onplay = () => window.audioService.duckAlarm(true);
+          this.strobeAudioPlayer.onended = () => window.audioService.duckAlarm(false);
+          this.strobeAudioPlayer.onpause = () => window.audioService.duckAlarm(false);
           if (isReceiver) {
             this.strobeAudioPlayer.play().catch(e => {
               console.warn('Autoplay audio bloqueado en update:', e);
