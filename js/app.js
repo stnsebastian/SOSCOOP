@@ -67,6 +67,9 @@ class AppController {
     this.strobeTitle = document.getElementById('strobe-title');
     this.strobeCallerName = document.getElementById('strobe-caller-name');
     this.strobeLocationText = document.getElementById('strobe-location-text');
+    this.strobeAudioBox = document.getElementById('strobe-audio-box');
+    this.strobeAudioPlayer = document.getElementById('strobe-audio-player');
+    this.btnStrobeOpenMap = document.getElementById('btn-strobe-open-map');
     this.btnStopAlarm = document.getElementById('btn-stop-alarm');
 
     // WhatsApp elementos opcionales
@@ -185,6 +188,12 @@ class AppController {
     // Detener alarma desde el Modal Estroboscópico
     this.btnStopAlarm.addEventListener('click', () => {
       window.audioService.stopAlarm();
+      if (this.strobeAudioPlayer) {
+        this.strobeAudioPlayer.pause();
+        this.strobeAudioPlayer.src = '';
+      }
+      if (this.strobeAudioBox) this.strobeAudioBox.classList.add('hidden');
+      if (this.btnStrobeOpenMap) this.btnStrobeOpenMap.classList.add('hidden');
       this.strobeModal.classList.add('hidden');
       this.strobeModal.className = 'strobe-modal hidden';
       this.activeStrobeAlert = null;
@@ -372,16 +381,54 @@ class AppController {
       this.audioPlayerElem.src = '';
     }
 
-    // Al activarla yo mismo, abrir también el modal de baliza para confirmación y alarma en sala
-    this.openStrobeModal(broadcasted);
+    // Al activarla yo mismo, abrir modal de baliza SOLO iluminación (isReceiver = false -> SIN alarma sonora para quien la emite)
+    this.openStrobeModal(broadcasted, false);
     this.renderAlertsFeed();
   }
 
   setupNetworkListeners() {
+    // Solicitar permiso de notificaciones push en segundo plano del sistema al iniciar listeners
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(e => console.warn('Permiso de notificación:', e));
+    }
+
+    // Solicitar WakeLock táctico para mantener el receptor listo y con pantalla alerta en sala de guardia
+    try {
+      if ('wakeLock' in navigator) {
+        navigator.wakeLock.request('screen').then(wl => {
+          this.screenWakeLock = wl;
+          console.log('[SOSCOOP] WakeLock de pantalla activo.');
+        }).catch(() => {});
+      }
+    } catch (e) {}
+
     window.networkService.onAlertReceived((alertData, isLocalBroadcast) => {
-      // Activar la baliza y sirena siempre (o cuando entra de otra pestaña/celular)
+      // Activar la baliza y sirena siempre (o cuando entra de otra pestaña/celular remoto)
       if (!isLocalBroadcast) {
-        this.openStrobeModal(alertData);
+        this.openStrobeModal(alertData, true);
+
+        // Si la PWA está en segundo plano o el celular tiene pantalla apagada/minimizada, disparar Notificación Push local de alta prioridad
+        if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+          let typeTitle = '🟡 COLABORACIÓN POLICIAL';
+          if (alertData.alertType === 'cooperacion') typeTitle = '🔴 ¡COOPERACIÓN URGENTE!';
+          if (alertData.alertType === 'guardia') typeTitle = '🔵 COOPERACIÓN SERVICIO DE GUARDIA';
+          
+          try {
+            const n = new Notification(`🚨 SOSCOOP: ${typeTitle}`, {
+              body: `Operador: ${alertData.operatorName || 'Funcionario Policial'} - Toca para abrir baliza y ubicación en mapa.`,
+              icon: './assets/icons/icon-192x192.png',
+              badge: './assets/icons/icon-192x192.png',
+              requireInteraction: true,
+              tag: alertData.id || 'soscoop-alert'
+            });
+            n.onclick = () => {
+              window.focus();
+              n.close();
+            };
+          } catch (e) {
+            console.warn('Notification error:', e);
+          }
+        }
       }
       this.renderAlertsFeed();
 
@@ -409,10 +456,11 @@ class AppController {
   }
 
   /**
-   * Muestra la baliza estroboscópica y activa la sirena en el celular
+   * Muestra la baliza estroboscópica y activa la sirena en el celular receptor
    * @param {Object} alertData 
+   * @param {boolean} isReceiver true si la recibimos de otro celular (suena sirena), false si la emitimos nosotros (solo iluminación)
    */
-  openStrobeModal(alertData) {
+  openStrobeModal(alertData, isReceiver = true) {
     this.activeStrobeAlert = alertData;
     const { alertType, operatorName, location, audioNote } = alertData;
 
@@ -422,27 +470,34 @@ class AppController {
       this.strobeModal.classList.add('theme-red');
       this.strobeIconBadge.textContent = '🚨';
       this.strobeTitle.textContent = '¡ COOPERACIÓN URGENTE !';
-      window.audioService.playAlarm('cooperacion');
+      if (isReceiver) window.audioService.playAlarm('cooperacion');
     } else if (alertType === 'colaboracion') {
       this.strobeModal.classList.add('theme-yellow');
       this.strobeIconBadge.textContent = '⚠️';
       this.strobeTitle.textContent = '¡ COLABORACIÓN POLICIAL !';
-      window.audioService.playAlarm('colaboracion');
+      if (isReceiver) window.audioService.playAlarm('colaboracion');
     } else if (alertType === 'guardia') {
       this.strobeModal.classList.add('theme-blue');
       this.strobeIconBadge.textContent = '🛡️';
       this.strobeTitle.textContent = '¡ COOPERACIÓN SERVICIO DE GUARDIA !';
-      window.audioService.playAlarm('guardia');
+      if (isReceiver) window.audioService.playAlarm('guardia');
     }
 
-    this.strobeCallerName.textContent = `Operador: ${operatorName}`;
+    this.strobeCallerName.textContent = `Operador: ${operatorName || 'Funcionario Policial'}`;
     
+    // Configurar ubicación GPS y botón para abrir mapa directamente
     if (location && location.isGuardia) {
       this.strobeLocationText.innerHTML = `<strong>📍 SERVICIO DE GUARDIA DE LA UNIDAD</strong>`;
+      if (this.btnStrobeOpenMap) this.btnStrobeOpenMap.classList.add('hidden');
     } else if (location && location.lat) {
       this.strobeLocationText.innerHTML = `📍 Coordenadas GPS: ${location.lat.toFixed(5)}, ${location.lng.toFixed(5)} <br><span style="font-size:11px;opacity:0.8;">Precisión ±${location.accuracy}m</span>`;
+      if (this.btnStrobeOpenMap && location.mapUrl) {
+        this.btnStrobeOpenMap.classList.remove('hidden');
+        this.btnStrobeOpenMap.onclick = () => window.open(location.mapUrl, '_blank');
+      }
     } else {
       this.strobeLocationText.textContent = `📍 Coordenadas en proceso...`;
+      if (this.btnStrobeOpenMap) this.btnStrobeOpenMap.classList.add('hidden');
     }
 
     this.lastAlertSentOrReceived = alertData;
@@ -450,10 +505,24 @@ class AppController {
       this.btnWhatsappResend.classList.remove('hidden');
     }
 
+    // Configurar reproductor de nota de voz en la baliza si el mensaje adjunta audio
+    if (audioNote && this.strobeAudioBox && this.strobeAudioPlayer) {
+      this.strobeAudioBox.classList.remove('hidden');
+      this.strobeAudioPlayer.src = audioNote;
+      if (isReceiver) {
+        setTimeout(() => {
+          this.strobeAudioPlayer.play().catch(e => console.warn('Autoplay audio bloqueado:', e));
+        }, 600);
+      }
+    } else if (this.strobeAudioBox) {
+      this.strobeAudioBox.classList.add('hidden');
+      if (this.strobeAudioPlayer) this.strobeAudioPlayer.src = '';
+    }
+
     this.strobeModal.classList.remove('hidden');
 
-    // Reproducir nota de voz automáticamente tras 0.5s si existe
-    if (audioNote) {
+    // Si es receptor y no se pudo reproducir por autoplay del tag audio, reproducir por Web Audio Service
+    if (audioNote && isReceiver) {
       setTimeout(() => {
         window.audioService.playAudioNote(audioNote);
       }, 500);
