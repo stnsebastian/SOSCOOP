@@ -55,9 +55,9 @@ body {
   font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  min-height: 100vh;
-  min-height: -webkit-fill-available;
-  overflow-x: hidden;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   background-image: 
     radial-gradient(circle at 50% 0%, rgba(26, 140, 255, 0.1) 0%, transparent 50%),
     radial-gradient(circle at 10% 90%, rgba(255, 26, 74, 0.05) 0%, transparent 40%);
@@ -68,12 +68,14 @@ body {
 .app-container {
   max-width: 480px;
   margin: 0 auto;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   position: relative;
   background: var(--bg-primary);
   box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
+  overflow: hidden;
 }
 
 /* Header / Topbar */
@@ -150,11 +152,13 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 20px;
-  padding-bottom: calc(var(--nav-height) + 24px);
+  padding: clamp(8px, 1.5vh, 16px) clamp(10px, 3vw, 16px);
+  padding-bottom: calc(var(--nav-height) + 10px);
   opacity: 0;
   transform: translateY(10px);
   transition: opacity 0.3s ease, transform 0.3s ease;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .view.active {
@@ -164,6 +168,21 @@ body {
 
 .hidden {
   display: none !important;
+}
+
+/* LOGIN SCREEN & DASHBOARD AUTO-FIT */
+#login-view {
+  justify-content: center;
+  align-items: center;
+  padding-bottom: calc(var(--nav-height) + 16px);
+}
+
+#dashboard-view {
+  justify-content: space-between;
+  gap: clamp(4px, 1vh, 8px);
+  overflow: hidden; /* Autoajuste 100% al alto del celular sin requerir scroll */
+  padding: clamp(8px, 1.4vh, 14px) clamp(10px, 3vw, 16px);
+  padding-bottom: calc(var(--nav-height) + 8px);
 }
 
 /* LOGIN SCREEN */
@@ -275,30 +294,31 @@ body {
 .operator-banner {
   background: var(--bg-card);
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
-  padding: 16px;
-  margin-bottom: 24px;
+  border-radius: var(--radius-sm);
+  padding: clamp(6px, 1.3vh, 12px) clamp(10px, 2.5vw, 14px);
+  margin-bottom: 2px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
 }
 
 .operator-info {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .operator-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
+  font-size: clamp(8px, 1.2vh, 10px);
+  font-weight: 700;
+  color: var(--accent-cyan);
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 0.8px;
 }
 
 .operator-name {
-  font-size: 18px;
+  font-size: clamp(13px, 1.9vh, 16px);
   font-weight: 800;
   color: var(--text-primary);
 }
@@ -307,12 +327,13 @@ body {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid var(--glass-border);
   color: var(--text-secondary);
-  padding: 8px 12px;
+  padding: 6px 10px;
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s;
+  flex-shrink: 0;
 }
 
 .btn-logout:hover {
@@ -323,36 +344,44 @@ body {
 
 /* EMERGENCY BUTTONS GRID */
 .section-header {
-  font-size: 13px;
+  font-size: clamp(9px, 1.4vh, 12px);
   font-weight: 800;
   color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 1.5px;
-  margin-bottom: 14px;
+  letter-spacing: 1.1px;
+  margin-bottom: 2px;
+  margin-top: 2px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .emergency-buttons-stack {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  margin-bottom: 28px;
+  justify-content: space-evenly;
+  gap: clamp(6px, 1.3vh, 12px);
+  margin-bottom: 2px;
+  flex: 1;
+  min-height: 0;
 }
 
 .sos-button {
   position: relative;
   width: 100%;
   border-radius: var(--radius-md);
-  padding: 22px 20px;
+  padding: clamp(8px, 1.8vh, 16px) clamp(10px, 3vw, 18px);
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: clamp(10px, 2.5vw, 14px);
   cursor: pointer;
   border: 2px solid transparent;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
+  flex: 1;
+  min-height: 48px;
+  max-height: 100px;
 }
 
 .sos-button:active {
@@ -360,13 +389,13 @@ body {
 }
 
 .sos-icon-box {
-  width: 58px;
-  height: 58px;
-  border-radius: 14px;
+  width: clamp(38px, 5.5vh, 52px);
+  height: clamp(38px, 5.5vh, 52px);
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 26px;
+  font-size: clamp(18px, 3vh, 24px);
   flex-shrink: 0;
   position: relative;
   z-index: 2;
@@ -375,26 +404,26 @@ body {
 .sos-text-box {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   position: relative;
   z-index: 2;
   flex: 1;
 }
 
 .sos-type-title {
-  font-size: 18px;
+  font-size: clamp(13px, 2.2vh, 17px);
   font-weight: 900;
   letter-spacing: 0.5px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .sos-type-desc {
-  font-size: 12px;
+  font-size: clamp(10px, 1.5vh, 12px);
   font-weight: 600;
   opacity: 0.85;
-  line-height: 1.3;
+  line-height: 1.18;
 }
 
 /* 1. Colaboración (Amarillo) */
@@ -456,11 +485,12 @@ body {
 .audio-recorder-box {
   background: var(--bg-card);
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
-  padding: 18px;
+  border-radius: var(--radius-sm);
+  padding: clamp(6px, 1.3vh, 14px) clamp(10px, 2.5vw, 16px);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: clamp(6px, 1vh, 12px);
+  flex-shrink: 0;
 }
 
 .audio-header {
@@ -480,16 +510,17 @@ body {
   background: rgba(30, 41, 66, 0.8);
   border: 1.5px dashed rgba(255, 255, 255, 0.3);
   border-radius: var(--radius-sm);
-  padding: 14px;
+  padding: clamp(8px, 1.4vh, 12px);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 8px;
   color: var(--text-primary);
   font-weight: 700;
-  font-size: 14px;
+  font-size: clamp(11px, 1.7vh, 14px);
   cursor: pointer;
   transition: all 0.2s;
+  min-height: 40px;
 }
 
 .btn-ptt.recording {
@@ -919,33 +950,34 @@ body {
 .pwa-install-banner {
   background: linear-gradient(135deg, rgba(56, 189, 248, 0.15), rgba(15, 22, 36, 0.9));
   border: 1px solid rgba(56, 189, 248, 0.5);
-  border-radius: var(--radius-md);
-  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  padding: clamp(6px, 1.3vh, 12px) clamp(10px, 2.5vw, 14px);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: 10px;
+  margin-bottom: 2px;
   box-shadow: 0 4px 18px rgba(56, 189, 248, 0.2);
+  flex-shrink: 0;
 }
 
 .pwa-install-text {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
 
 .pwa-install-text strong {
-  font-size: 13px;
+  font-size: clamp(11px, 1.6vh, 13px);
   font-weight: 800;
   color: var(--blue-glow);
   letter-spacing: 0.3px;
 }
 
 .pwa-install-text span {
-  font-size: 11px;
+  font-size: clamp(9px, 1.3vh, 11px);
   color: var(--text-secondary);
-  line-height: 1.3;
+  line-height: 1.2;
 }
 
 .btn-install-pwa {
@@ -1002,30 +1034,31 @@ body {
 .whatsapp-dashboard-banner {
   background: linear-gradient(135deg, rgba(37, 211, 102, 0.15), rgba(15, 22, 36, 0.8));
   border: 1px solid rgba(37, 211, 102, 0.45);
-  border-radius: var(--radius-md);
-  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  padding: clamp(6px, 1.3vh, 12px) clamp(10px, 2.5vw, 14px);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 2px;
   box-shadow: 0 4px 15px rgba(37, 211, 102, 0.15);
+  flex-shrink: 0;
 }
 
 .whatsapp-banner-info {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
 
 .whatsapp-banner-title {
-  font-size: 14px;
+  font-size: clamp(11px, 1.6vh, 13px);
   font-weight: 800;
   color: #25D366;
   letter-spacing: 0.3px;
 }
 
 .whatsapp-banner-sub {
-  font-size: 11px;
+  font-size: clamp(9px, 1.3vh, 11px);
   font-weight: 600;
   color: var(--text-secondary);
 }
@@ -1130,4 +1163,40 @@ input:checked + .switch-slider:before {
 @keyframes pulse-recording {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.02); }
+}
+
+/* AUTO-AJUSTE DINÁMICO PARA PANTALLAS COMPACTAS O NAVEGADORES MÓVILES */
+@media screen and (max-height: 850px), screen and (max-width: 600px) {
+  :root {
+    --header-height: 54px;
+    --nav-height: 60px;
+  }
+
+  .tactical-header {
+    padding: 0 14px;
+  }
+
+  .brand-badge {
+    width: 34px;
+    height: 34px;
+    font-size: 14px;
+  }
+
+  .brand-title {
+    font-size: 18px;
+  }
+
+  .tactical-nav {
+    height: var(--nav-height);
+    padding-bottom: 4px;
+  }
+
+  .nav-btn svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .nav-btn span {
+    font-size: 10px;
+  }
 }
